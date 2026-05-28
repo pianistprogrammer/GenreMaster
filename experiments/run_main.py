@@ -308,7 +308,6 @@ def main():
     if config['logging']['use_trackio']:
         trackio.init(
             project=config['logging']['trackio']['project'],
-            experiment=config['logging']['trackio']['experiment'],
         )
         print("✓ Trackio initialized\n")
 
