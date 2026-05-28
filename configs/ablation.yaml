@@ -1,0 +1,90 @@
+# GenreMaster Ablation Study Configuration
+
+# Experiment metadata
+experiment:
+  name: "genremaster-ablation"
+  description: "Ablation studies: conditioned vs unconditioned, FiLM variants"
+  seed: 42
+
+# Dataset configuration (same as default)
+data:
+  root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
+  audio_dir: "/Volumes/LLModels/Datasets/fma_medium"
+  sample_rate: 44100
+  duration: 30.0
+  top_k_genres: 16
+  samples_per_genre: 1500
+
+  # Quick ablation study
+  n_train_samples: 100
+  n_val_samples: 20
+
+  target_lufs: -18.0
+  augment_train: true
+
+# Ablation variants to run
+ablation:
+  variants:
+    - name: "baseline_unconditioned"
+      model:
+        conditioned: false
+        encoder_type: "lightweight"
+
+    - name: "full_conditioned"
+      model:
+        conditioned: true
+        encoder_type: "lightweight"
+
+    - name: "resnet_conditioned"
+      model:
+        conditioned: true
+        encoder_type: "resnet"
+
+    - name: "genre_only"
+      model:
+        conditioned: true
+        encoder_type: "lightweight"
+        genre_only_mode: true  # No audio conditioning
+
+# Training configuration (reduced for ablation)
+training:
+  batch_size: 4
+  num_epochs: 30  # Fewer epochs for ablation
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  lr_scheduler: "cosine"
+  warmup_epochs: 3
+  grad_clip: 1.0
+  save_every: 10
+
+# Loss configuration
+loss:
+  weights:
+    loudness: 1.0
+    spectral: 0.5
+    dynamic: 0.5
+    perceptual: 0.1
+
+# Optimizer
+optimizer:
+  name: "adam"
+  betas: [0.9, 0.999]
+
+# Device
+device:
+  type: "auto"
+  num_workers: 0
+
+# Logging
+logging:
+  use_trackio: true
+  log_every: 10
+  trackio:
+    project: "genremaster"
+    experiment: "ablation-study"
+
+# Output
+output:
+  checkpoint_dir: "results/ablation"
+  log_dir: "results/logs/ablation"
+  comparison_file: "results/ablation/comparison.csv"

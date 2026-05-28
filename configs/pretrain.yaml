@@ -1,0 +1,75 @@
+# GenreMaster Pre-training Configuration (Genre Embedding)
+
+# Experiment metadata
+experiment:
+  name: "genremaster-pretrain"
+  description: "Genre embedding pre-training with contrastive learning"
+  seed: 42
+
+# Dataset configuration
+data:
+  root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
+  audio_dir: "/Volumes/LLModels/Datasets/fma_medium"
+  sample_rate: 44100
+  duration: 30.0
+  top_k_genres: 16
+  samples_per_genre: 1500
+
+  # Quick testing
+  n_train_samples: 200  # More samples for pre-training
+  n_val_samples: 40
+
+# Model configuration
+model:
+  encoder_type: "lightweight"
+  audio_feature_dim: 512
+  genre_latent_dim: 128
+
+# Pre-training configuration
+pretraining:
+  batch_size: 32  # Larger batch for contrastive learning
+  num_epochs: 20
+  learning_rate: 1.0e-3  # Higher LR for pre-training
+  weight_decay: 1.0e-5
+
+  # Contrastive loss
+  temperature: 0.07
+  use_classifier: true  # Also use classification loss
+
+  # Learning rate schedule
+  lr_scheduler: "cosine"
+  warmup_epochs: 2
+
+  # Checkpointing
+  save_every: 5
+  keep_last_n: 2
+
+# Loss weights
+loss:
+  contrastive_weight: 1.0
+  classification_weight: 0.5
+
+# Optimizer
+optimizer:
+  name: "adam"
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+# Device
+device:
+  type: "auto"
+  num_workers: 0
+
+# Logging
+logging:
+  use_trackio: true
+  log_every: 5
+  trackio:
+    project: "genremaster"
+    experiment: "pretrain-genre-embedding"
+
+# Output
+output:
+  checkpoint_dir: "results/pretraining"
+  log_dir: "results/logs/pretraining"
+  final_model_path: "results/pretraining/genre_embedding_pretrained.pt"
