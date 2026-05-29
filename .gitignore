@@ -37,6 +37,7 @@ ENV/
 
 # Data and results (large files)
 data/
+!data/fma_metadata/
 results/
 *.wav
 *.mp3
