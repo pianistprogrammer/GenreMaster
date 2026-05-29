@@ -14,7 +14,8 @@ class LoudnessNormalize:
             waveform = torch.tensor(waveform)
             
         # waveform is (channels, samples), pyln expects (samples, channels)
-        audio_np = waveform.numpy().T
+        # Ensure it is on the CPU before converting to NumPy
+        audio_np = waveform.detach().cpu().numpy().T
         
         try:
             loudness = self.meter.integrated_loudness(audio_np)
@@ -22,22 +23,28 @@ class LoudnessNormalize:
                 return waveform
                 
             audio_normalized = pyln.normalize.loudness(audio_np, loudness, self.target_lufs)
-            return torch.from_numpy(audio_normalized.T).to(waveform.dtype)
+            # Ensure the output tensor is placed on the original device and matches dtype
+            return torch.from_numpy(audio_normalized.T).to(device=waveform.device, dtype=waveform.dtype)
         except Exception:
             return waveform
 
-class PipelineTransform:
-    def __init__(self, transforms):
-        self.transforms = transforms
+class PreMasterTransform:
+    def __init__(self, target_lufs, sample_rate, augment=False):
+        self.target_lufs = target_lufs
+        self.sample_rate = sample_rate
+        self.augment = augment
+        self.normalizer = LoudnessNormalize(target_lufs, sample_rate)
         
-    def __call__(self, x):
-        for t in self.transforms:
-            x = t(x)
-        return x
+    def __call__(self, waveform):
+        target = waveform.clone()
+        pre_master = self.normalizer(waveform)
+        # Pre-master and target pairs are expected
+        return pre_master, target
 
 def create_premaster_transforms(target_lufs, sample_rate, augment_train=False):
     """
     Returns train and validation transforms.
     """
-    base_transform = LoudnessNormalize(target_lufs, sample_rate)
-    return PipelineTransform([base_transform]), PipelineTransform([base_transform])
+    train_transform = PreMasterTransform(target_lufs, sample_rate, augment=augment_train)
+    val_transform = PreMasterTransform(target_lufs, sample_rate, augment=False)
+    return train_transform, val_transform
