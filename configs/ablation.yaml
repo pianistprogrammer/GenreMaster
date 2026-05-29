@@ -9,15 +9,15 @@ experiment:
 # Dataset configuration (same as default)
 data:
   root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
-  audio_dir: "/Volumes/LLModels/Datasets/fma_medium"
+  audio_dir: "/Volumes/LLModels/Datasets/fma_small"
   sample_rate: 44100
   duration: 30.0
   top_k_genres: 16
   samples_per_genre: 1500
 
-  # Quick ablation study
-  n_train_samples: 100
-  n_val_samples: 20
+  # Full ablation study
+  n_train_samples: null  # Use all available samples (6,861 train)
+  n_val_samples: null    # Use all available samples (852 val)
 
   target_lufs: -18.0
   augment_train: true

@@ -9,15 +9,15 @@ experiment:
 # Dataset configuration
 data:
   root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
-  audio_dir: "/Volumes/LLModels/Datasets/fma_medium"
+  audio_dir: "/Volumes/LLModels/Datasets/fma_small"
   sample_rate: 44100
   duration: 30.0
   top_k_genres: 16
   samples_per_genre: 1500
 
-  # Quick testing
-  n_train_samples: 200  # More samples for pre-training
-  n_val_samples: 40
+  # For full pre-training
+  n_train_samples: null  # Use all available samples (6,861 train)
+  n_val_samples: null    # Use all available samples (852 val)
 
 # Model configuration
 model:

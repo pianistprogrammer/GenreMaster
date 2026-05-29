@@ -9,7 +9,7 @@ experiment:
 # Dataset configuration
 data:
   root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
-  audio_dir: "/Volumes/LLModels/Datasets/fma_medium"
+  audio_dir: "/Volumes/LLModels/Datasets/fma_small"
   sample_rate: 44100
   duration: 30.0  # seconds
   top_k_genres: 16
@@ -17,8 +17,8 @@ data:
 
   # For quick testing, set n_train_samples to limit dataset size
   # Set to null for full dataset
-  n_train_samples: 100  # Use 100 samples for quick testing
-  n_val_samples: 20
+  n_train_samples: null  # Use all available samples (6,861 train)
+  n_val_samples: null    # Use all available samples (852 val)
 
   # Pre-master simulation
   target_lufs: -18.0

@@ -6,6 +6,11 @@ nothing will break when scaling to full dataset. Tests both MPS and CUDA.
 
 import sys
 from pathlib import Path
+import warnings
+
+# Filter PyTorch STFT resize warnings (harmless deprecation warnings)
+warnings.filterwarnings('ignore', message='.*An output with one or more elements was resized.*')
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset

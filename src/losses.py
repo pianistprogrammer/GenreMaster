@@ -61,18 +61,29 @@ class LoudnessLoss(nn.Module):
                 pred_lufs = meter.integrated_loudness(pred_audio)
                 target_lufs = meter.integrated_loudness(target_audio)
 
-                # Handle edge cases
-                if torch.isinf(torch.tensor(pred_lufs)) or torch.isinf(torch.tensor(target_lufs)):
-                    loss = torch.tensor(0.0, device=pred.device)
-                else:
+                # Handle edge cases (inf or very low loudness)
+                pred_is_valid = not (torch.isinf(torch.tensor(pred_lufs)) or pred_lufs < -70.0)
+                target_is_valid = not (torch.isinf(torch.tensor(target_lufs)) or target_lufs < -70.0)
+
+                if pred_is_valid and target_is_valid:
                     loss = abs(pred_lufs - target_lufs)
-                    loss = torch.tensor(loss, device=pred.device)
-
-                losses.append(loss)
+                    losses.append(torch.tensor(loss, device=pred.device, dtype=pred.dtype))
+                else:
+                    # Use RMS-based fallback for very quiet audio
+                    pred_rms = torch.sqrt(torch.mean(pred[i] ** 2))
+                    target_rms = torch.sqrt(torch.mean(target[i] ** 2))
+                    rms_loss = torch.abs(pred_rms - target_rms) * 20.0  # Scale to ~LUFS range
+                    losses.append(rms_loss)
             except Exception:
-                losses.append(torch.tensor(0.0, device=pred.device))
+                # Fallback to RMS loss
+                pred_rms = torch.sqrt(torch.mean(pred[i] ** 2))
+                target_rms = torch.sqrt(torch.mean(target[i] ** 2))
+                rms_loss = torch.abs(pred_rms - target_rms) * 20.0
+                losses.append(rms_loss)
 
-        return torch.stack(losses).mean()
+        result = torch.stack(losses).mean()
+        # Clamp to prevent extreme values
+        return torch.clamp(result, min=0.0, max=100.0)
 
 
 class SpectralLoss(nn.Module):
@@ -411,12 +422,41 @@ class GenreMasterLoss(nn.Module):
         loss_dynamic = self.dynamic_loss(pred, target)
         loss_perceptual = self.perceptual_loss(pred, target)
 
+        # Check for NaN/Inf in individual losses
+        loss_loudness = torch.where(
+            torch.isnan(loss_loudness) | torch.isinf(loss_loudness),
+            torch.zeros_like(loss_loudness),
+            loss_loudness
+        )
+        loss_spectral = torch.where(
+            torch.isnan(loss_spectral) | torch.isinf(loss_spectral),
+            torch.zeros_like(loss_spectral),
+            loss_spectral
+        )
+        loss_dynamic = torch.where(
+            torch.isnan(loss_dynamic) | torch.isinf(loss_dynamic),
+            torch.zeros_like(loss_dynamic),
+            loss_dynamic
+        )
+        loss_perceptual = torch.where(
+            torch.isnan(loss_perceptual) | torch.isinf(loss_perceptual),
+            torch.zeros_like(loss_perceptual),
+            loss_perceptual
+        )
+
         # Weighted combination
         total_loss = (
             self.lambda_loudness * loss_loudness +
             self.lambda_spectral * loss_spectral +
             self.lambda_dynamic * loss_dynamic +
             self.lambda_perceptual * loss_perceptual
+        )
+
+        # Final NaN check
+        total_loss = torch.where(
+            torch.isnan(total_loss) | torch.isinf(total_loss),
+            torch.tensor(0.0, device=total_loss.device, dtype=total_loss.dtype),
+            total_loss
         )
 
         if return_components:

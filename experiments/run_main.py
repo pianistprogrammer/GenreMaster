@@ -12,6 +12,10 @@ from typing import Dict, Optional
 import yaml
 import json
 import time
+import warnings
+
+# Filter PyTorch STFT resize warnings (harmless deprecation warnings)
+warnings.filterwarnings('ignore', message='.*An output with one or more elements was resized.*')
 
 import torch
 import torch.nn as nn
@@ -304,6 +308,16 @@ def main():
     log_dir = Path(config['output']['log_dir'])
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    # Initialize training history
+    training_history = {
+        'config': config,
+        'experiment_name': config['experiment']['name'],
+        'start_time': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'device': str(device),
+        'epochs': []
+    }
+    history_path = log_dir / 'training_history.json'
+
     # Initialize Trackio
     if config['logging']['use_trackio']:
         trackio.init(
@@ -380,6 +394,7 @@ def main():
 
     for epoch in range(start_epoch, config['training']['num_epochs']):
         print(f"\nEpoch {epoch + 1}/{config['training']['num_epochs']}")
+        epoch_start_time = time.time()
 
         # Train
         train_losses = train_epoch(
@@ -396,6 +411,35 @@ def main():
         )
 
         print(f"Val loss: {val_losses['total']:.6f}")
+
+        epoch_time = time.time() - epoch_start_time
+
+        # Save epoch metrics to history
+        epoch_data = {
+            'epoch': epoch + 1,
+            'train_loss': train_losses['total'],
+            'train_loss_components': {
+                'loudness': train_losses['loudness'],
+                'spectral': train_losses['spectral'],
+                'dynamic': train_losses['dynamic'],
+                'perceptual': train_losses['perceptual']
+            },
+            'val_loss': val_losses['total'],
+            'val_loss_components': {
+                'loudness': val_losses['loudness'],
+                'spectral': val_losses['spectral'],
+                'dynamic': val_losses['dynamic'],
+                'perceptual': val_losses['perceptual']
+            },
+            'learning_rate': optimizer.param_groups[0]['lr'],
+            'epoch_time_seconds': epoch_time,
+            'is_best': val_losses['total'] < best_val_loss
+        }
+        training_history['epochs'].append(epoch_data)
+
+        # Save history to JSON after each epoch
+        with open(history_path, 'w') as f:
+            json.dump(training_history, f, indent=2)
 
         # Log to Trackio
         if config['logging']['use_trackio']:
@@ -438,11 +482,20 @@ def main():
         best_val_loss, config, final_path
     )
 
+    # Finalize training history
+    training_history['end_time'] = time.strftime('%Y-%m-%d %H:%M:%S')
+    training_history['best_val_loss'] = best_val_loss
+    training_history['total_epochs'] = len(training_history['epochs'])
+
+    with open(history_path, 'w') as f:
+        json.dump(training_history, f, indent=2)
+
     print("\n" + "=" * 70)
     print("Training Complete!")
     print("=" * 70)
     print(f"Best validation loss: {best_val_loss:.6f}")
     print(f"Checkpoints saved to: {checkpoint_dir}")
+    print(f"Training history saved to: {history_path}")
 
 
 if __name__ == "__main__":

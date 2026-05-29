@@ -12,6 +12,10 @@ import sys
 from pathlib import Path
 from typing import Dict
 import yaml
+import warnings
+
+# Filter PyTorch STFT resize warnings (harmless deprecation warnings)
+warnings.filterwarnings('ignore', message='.*An output with one or more elements was resized.*')
 
 import torch
 import torch.nn as nn
@@ -287,6 +291,18 @@ def main():
     # Create output directories
     checkpoint_dir = Path(config['output']['checkpoint_dir'])
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    log_dir = Path(config['output'].get('log_dir', 'results/logs'))
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Initialize training history
+    training_history = {
+        'config': config,
+        'experiment_name': config['experiment']['name'],
+        'start_time': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'device': str(device),
+        'epochs': []
+    }
+    history_path = log_dir / 'pretrain_history.json'
 
     # Initialize Trackio
     if config['logging']['use_trackio']:
@@ -363,6 +379,7 @@ def main():
 
     for epoch in range(config['pretraining']['num_epochs']):
         print(f"\nEpoch {epoch + 1}/{config['pretraining']['num_epochs']}")
+        epoch_start_time = time.time()
 
         # Train
         train_losses = train_epoch(
@@ -384,6 +401,32 @@ def main():
 
         print(f"Val loss: {val_losses['total']:.6f}, "
               f"accuracy: {val_losses['accuracy']:.2f}%")
+
+        epoch_time = time.time() - epoch_start_time
+
+        # Save epoch metrics to history
+        epoch_data = {
+            'epoch': epoch + 1,
+            'train_loss': train_losses['total'],
+            'train_loss_components': {
+                'contrastive': train_losses['contrastive'],
+                'classification': train_losses['classification']
+            },
+            'val_loss': val_losses['total'],
+            'val_loss_components': {
+                'contrastive': val_losses['contrastive'],
+                'classification': val_losses['classification']
+            },
+            'val_accuracy': val_losses['accuracy'],
+            'learning_rate': optimizer.param_groups[0]['lr'],
+            'epoch_time_seconds': epoch_time,
+            'is_best': val_losses['total'] < best_val_loss
+        }
+        training_history['epochs'].append(epoch_data)
+
+        # Save history to JSON after each epoch
+        with open(history_path, 'w') as f:
+            json.dump(training_history, f, indent=2)
 
         # Log to Trackio
         if config['logging']['use_trackio']:
@@ -427,11 +470,20 @@ def main():
         'output_dim': config['model']['genre_latent_dim'],
     }, final_path)
 
+    # Finalize training history
+    training_history['end_time'] = time.strftime('%Y-%m-%d %H:%M:%S')
+    training_history['best_val_loss'] = best_val_loss
+    training_history['total_epochs'] = len(training_history['epochs'])
+
+    with open(history_path, 'w') as f:
+        json.dump(training_history, f, indent=2)
+
     print("\n" + "=" * 70)
     print("Pre-training Complete!")
     print("=" * 70)
     print(f"Best validation loss: {best_val_loss:.6f}")
     print(f"Pre-trained genre embedding saved to: {final_path}")
+    print(f"Training history saved to: {history_path}")
 
 
 if __name__ == "__main__":
