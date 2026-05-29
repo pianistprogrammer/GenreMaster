@@ -227,7 +227,7 @@ def main():
     parser.add_argument('--checkpoint', type=str, required=True,
                         help='Path to trained model checkpoint')
     parser.add_argument('--musdb_dir', type=str,
-                        default='/Volumes/LLModels/Datasets/musdb18',
+                        default='/Volumes/LLModels/Datasets/musdb18hq',
                         help='Path to MUSDB18-HQ directory')
     parser.add_argument('--output', type=str, default='results/evaluation',
                         help='Output directory for results')

@@ -1,0 +1,47 @@
+# Genre Classifier Configuration (FMA Small - 8 Genres)
+
+# Data configuration
+data:
+  audio_dir: "/Volumes/LLModels/Datasets/fma_small"
+  root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
+  sample_rate: 44100
+  duration: 30.0
+  top_k_genres: 8  # FMA Small has 8 balanced genres
+  samples_per_genre: null  # Use all 1,000 per genre
+
+# Training configuration
+training:
+  batch_size: 32  # Larger batch for classification
+  num_epochs: 20  # Quick training for classifier
+  learning_rate: 1.0e-3  # Higher LR for faster convergence
+  weight_decay: 1.0e-4  # L2 regularization
+
+  # Learning rate schedule
+  lr_scheduler: "cosine"
+  warmup_epochs: 2
+
+  # Checkpointing
+  save_every: 5
+  keep_last_n: 2
+
+# Model configuration
+model:
+  n_genres: 8
+  n_mels: 128  # Mel spectrogram bands
+  dropout: 0.3  # Dropout for regularization
+
+# Optimizer configuration
+optimizer:
+  name: "adam"
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+# Device configuration
+device:
+  type: "auto"  # auto-detect MPS/CUDA/CPU
+  num_workers: 0
+
+# Output paths
+output:
+  checkpoint_dir: "results"
+  model_name: "genre_classifier_best.pt"
