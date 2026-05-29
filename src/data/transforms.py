@@ -2,6 +2,7 @@ import torch
 import torchaudio
 import numpy as np
 import pyloudnorm as pyln
+import warnings
 
 class LoudnessNormalize:
     def __init__(self, target_lufs=-18.0, sample_rate=44100):
@@ -22,7 +23,13 @@ class LoudnessNormalize:
             if np.isinf(loudness):
                 return waveform
                 
-            audio_normalized = pyln.normalize.loudness(audio_np, loudness, self.target_lufs)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                audio_normalized = pyln.normalize.loudness(audio_np, loudness, self.target_lufs)
+                
+            # Prevent excessive clipping issues from flowing to model output explicitly
+            audio_normalized = np.clip(audio_normalized, -1.0, 1.0)
+            
             # Ensure the output tensor is placed on the original device and matches dtype
             return torch.from_numpy(audio_normalized.T).to(device=waveform.device, dtype=waveform.dtype)
         except Exception:

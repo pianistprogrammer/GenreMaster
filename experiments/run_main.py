@@ -217,7 +217,6 @@ def train_epoch(
                 'train/loss_perceptual': losses['perceptual'].item(),
                 'train/lr': optimizer.param_groups[0]['lr'],
                 'epoch': epoch,
-                'step': step,
             })
 
     # Average losses

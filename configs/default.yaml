@@ -12,7 +12,7 @@ data:
   audio_dir: "C:/Users/jerem/Documents/Datasets/fma_small"
   sample_rate: 44100
   duration: 30.0  # seconds
-  top_k_genres: 16
+  top_k_genres: 8
   samples_per_genre: 1500
 
   # For quick testing, set n_train_samples to limit dataset size
