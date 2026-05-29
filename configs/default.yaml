@@ -9,7 +9,7 @@ experiment:
 # Dataset configuration
 data:
   root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
-  audio_dir: "/Volumes/LLModels/Datasets/fma_small"
+  audio_dir: "C:/Users/jerem/Documents/Projects/Datasets/fma_small"
   sample_rate: 44100
   duration: 30.0  # seconds
   top_k_genres: 16
