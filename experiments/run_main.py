@@ -20,12 +20,14 @@ warnings.filterwarnings('ignore', message='.*An output with one or more elements
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
+import numpy as np
 from tqdm import tqdm
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from data.fma import setup_fma_medium
+from data.gtzan import setup_gtzan
 from data.transforms import create_premaster_transforms
 from models.genremaster import create_genremaster_model
 from losses import create_loss_function
@@ -38,7 +40,9 @@ def collate_fn(batch):
     min_length = min(item['waveform'].shape[1] for item in batch)
     waveforms = torch.stack([item['waveform'][:, :min_length] for item in batch])
     genre_indices = torch.tensor([item['genre_idx'] for item in batch])
-    track_ids = [item['track_id'] for item in batch]
+    
+    # Handle both FMA (track_id) and GTZAN (path) formats
+    track_ids = [item.get('track_id', item.get('path', '')) for item in batch]
 
     return {
         'waveform': waveforms,
@@ -56,13 +60,23 @@ def load_config(config_path: str) -> Dict:
 
 def create_dataloaders(config: Dict):
     """Create train and validation dataloaders."""
-    # Setup dataset
-    datasets, genre_to_idx = setup_fma_medium(
-        data_root=Path(config['data']['root_dir']),
-        audio_dir=Path(config['data']['audio_dir']),
-        top_k_genres=config['data']['top_k_genres'],
-        samples_per_genre=config['data']['samples_per_genre'],
-    )
+    # Setup dataset based on config
+    dataset_type = config['data'].get('dataset_type', 'fma')
+    
+    if dataset_type == 'gtzan':
+        datasets, genre_to_idx = setup_gtzan(
+            data_root=config['data']['root_dir'],
+            audio_dir=config['data']['audio_dir'],
+            num_genres=config['data']['top_k_genres'],
+        )
+    else:
+        # Default to FMA
+        datasets, genre_to_idx = setup_fma_medium(
+            data_root=Path(config['data']['root_dir']),
+            audio_dir=Path(config['data']['audio_dir']),
+            top_k_genres=config['data']['top_k_genres'],
+            samples_per_genre=config['data']['samples_per_genre'],
+        )
 
     # Limit dataset size if specified
     if config['data'].get('n_train_samples'):
@@ -234,6 +248,7 @@ def validate_epoch(
     device: torch.device,
     transforms: tuple,
     epoch: int,
+    debug=False,
 ) -> Dict[str, float]:
     """Validate for one epoch."""
     model.eval()
@@ -242,9 +257,11 @@ def validate_epoch(
     total_loss = 0.0
     loss_components = {'loudness': 0.0, 'spectral': 0.0, 'dynamic': 0.0, 'perceptual': 0.0}
     num_batches = 0
+    batch_losses = []
+    first_batch_output = None
 
     with torch.no_grad():
-        for batch in tqdm(val_loader, desc=f"Validation"):
+        for batch_idx, batch in enumerate(tqdm(val_loader, desc=f"Validation")):
             waveform = batch['waveform'].to(device)
             genre_idx = batch['genre_idx'].to(device)
 
@@ -261,12 +278,20 @@ def validate_epoch(
 
             # Forward pass
             output = model(pre_master_batch, genre_idx)
+            
+            # Store first batch output for debugging
+            if first_batch_output is None:
+                first_batch_output = output.detach().cpu().clone()
 
             # Compute loss
             losses = criterion(output, target_batch, return_components=True)
 
+            # Track per-batch loss
+            batch_loss = losses['total'].item()
+            batch_losses.append(batch_loss)
+
             # Accumulate
-            total_loss += losses['total'].item()
+            total_loss += batch_loss
             for key in loss_components:
                 loss_components[key] += losses[key].item()
             num_batches += 1
@@ -275,6 +300,16 @@ def validate_epoch(
     avg_loss = total_loss / num_batches
     for key in loss_components:
         loss_components[key] /= num_batches
+    
+    # Log loss variation
+    if batch_losses:
+        batch_losses_np = np.array(batch_losses)
+        loss_std = batch_losses_np.std()
+        print(f"  Val loss std dev: {loss_std:.6f}, min: {batch_losses_np.min():.6f}, max: {batch_losses_np.max():.6f}")
+        
+        # Debug output
+        if debug and first_batch_output is not None:
+            print(f"  [DEBUG] First batch output stats - mean: {first_batch_output.mean():.6f}, std: {first_batch_output.std():.6f}")
 
     return {'total': avg_loss, **loss_components}
 
@@ -391,9 +426,19 @@ def main():
     print("Starting Training")
     print("=" * 70)
 
+    # Track model weight changes
+    prev_weights = None
+
     for epoch in range(start_epoch, config['training']['num_epochs']):
         print(f"\nEpoch {epoch + 1}/{config['training']['num_epochs']}")
         epoch_start_time = time.time()
+
+        # Capture weights before training
+        current_weights = torch.cat([p.data.view(-1) for p in model.parameters()])
+        
+        if prev_weights is not None:
+            weight_change = torch.norm(current_weights - prev_weights).item()
+            print(f"  Weight change from prev epoch: {weight_change:.8f}")
 
         # Train
         train_losses = train_epoch(
@@ -402,11 +447,17 @@ def main():
         )
 
         print(f"Train loss: {train_losses['total']:.6f}")
+        
+        # Check weight change after training
+        new_weights = torch.cat([p.data.view(-1) for p in model.parameters()])
+        weight_change_during_epoch = torch.norm(new_weights - current_weights).item()
+        print(f"  Weight change during epoch: {weight_change_during_epoch:.8f}")
+        prev_weights = new_weights
 
         # Validate
         val_losses = validate_epoch(
             model, val_loader, criterion, device,
-            (train_transform, val_transform), epoch
+            (train_transform, val_transform), epoch, debug=True
         )
 
         print(f"Val loss: {val_losses['total']:.6f}")

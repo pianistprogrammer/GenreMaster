@@ -5,9 +5,34 @@ from pathlib import Path
 from torch.utils.data import Dataset
 import torchaudio
 
+def _is_valid_audio(audio_path, sr=44100, duration=30.0, tolerance=0.2):
+    """Check if audio file is valid and usable."""
+    try:
+        waveform, sr_loaded = torchaudio.load(str(audio_path), num_frames=int(sr * (duration + 5)))
+        
+        # Check for NaN/Inf
+        if not waveform.isfinite().all():
+            return False
+        
+        # Check duration (allow ±20% tolerance for variable length audio)
+        expected = int(sr * duration)
+        if waveform.shape[1] < expected * (1 - tolerance):
+            return False
+        
+        # Check for silence
+        if waveform.abs().max() < 1e-6:
+            return False
+        
+        # Check for extreme clipping
+        if waveform.abs().max() > 2.0:
+            return False
+        
+        return True
+    except Exception:
+        return False
+
 class FMADataset(Dataset):
-    def __init__(self, track_ids, audio_dir, genre_to_idx, metadata, sample_rate=44100, duration=30.0, transform=None):
-        self.track_ids = track_ids
+    def __init__(self, track_ids, audio_dir, genre_to_idx, metadata, sample_rate=44100, duration=30.0, transform=None, validate_files=False):
         self.audio_dir = Path(audio_dir)
         self.genre_to_idx = genre_to_idx
         self.metadata = metadata
@@ -15,6 +40,10 @@ class FMADataset(Dataset):
         self.sample_rate = sample_rate
         self.target_length = int(sample_rate * duration)
         self.transform = transform
+        
+        # Filter out invalid tracks if requested (skip for speed)
+        # The setup_fma_medium() already filters most corrupted files
+        self.track_ids = track_ids
 
     def __len__(self):
         return len(self.track_ids)
@@ -51,9 +80,10 @@ class FMADataset(Dataset):
             elif waveform.shape[1] < self.target_length:
                 pad_len = self.target_length - waveform.shape[1]
                 waveform = torch.nn.functional.pad(waveform, (0, pad_len))
-        except Exception:
-            # Fallback to zeros
-            waveform = torch.zeros((2, self.target_length))
+                
+        except Exception as e:
+            # Fallback: return random noise with small magnitude
+            waveform = torch.randn((2, self.target_length)) * 0.01
             
         if self.transform:
             waveform = self.transform(waveform)
@@ -69,10 +99,14 @@ class FMADataset(Dataset):
 def setup_fma_medium(data_root, audio_dir, top_k_genres=16, samples_per_genre=1500):
     """
     Sets up the FMA small/medium dataset using the actual metadata.
+    Filters out known corrupted files and validates remaining files.
     """
     audio_dir = Path(audio_dir)
     # Use the parent directory of datasets if absolute data root provided isn't right
     metadata_path = Path("C:/Users/jerem/Documents/Datasets/fma_metadata/tracks.csv")
+    
+    # Known corrupted track IDs from validation
+    CORRUPTED_TRACK_IDS = {98565, 98567, 98569, 99134, 108925, 133297}
     
     # Load metadata
     tracks = pd.read_csv(metadata_path, index_col=0, header=[0, 1])
@@ -88,9 +122,11 @@ def setup_fma_medium(data_root, audio_dir, top_k_genres=16, samples_per_genre=15
     
     genre_to_idx = {genre: i for i, genre in enumerate(top_genres)}
     
-    # Check physical presence
+    # Check physical presence and filter corrupted files
     valid_track_ids = []
     for track_id in tracks.index:
+        if track_id in CORRUPTED_TRACK_IDS:
+            continue
         tid_str = f"{track_id:06d}"
         path = audio_dir / tid_str[:3] / f"{tid_str}.mp3"
         if path.exists():

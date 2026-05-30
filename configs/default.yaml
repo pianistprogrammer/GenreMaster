@@ -9,20 +9,23 @@ experiment:
 # Dataset configuration
 data:
   root_dir: "C:/Users/jerem/Documents/Projects/GenreMaster/data"
-  audio_dir: "C:/Users/jerem/Documents/Datasets/fma_small"
+  audio_dir: "C:/Users/jerem/Documents/Datasets/GTZAN/genres_original"
   sample_rate: 44100
   duration: 30.0  # seconds
-  top_k_genres: 8
-  samples_per_genre: 1500
+  top_k_genres: 10  # GTZAN has exactly 10 genres
+  samples_per_genre: 100  # 100 samples per genre in GTZAN
 
   # For quick testing, set n_train_samples to limit dataset size
   # Set to null for full dataset
-  n_train_samples: null  # Use all available samples (6,861 train)
-  n_val_samples: null    # Use all available samples (852 val)
+  n_train_samples: null  # Use all available samples
+  n_val_samples: null    # Use all available samples
 
   # Pre-master simulation
   target_lufs: -18.0
   augment_train: true
+  
+  # Dataset type
+  dataset_type: "gtzan"  # Use GTZAN instead of FMA
 
 # Model configuration
 model:
