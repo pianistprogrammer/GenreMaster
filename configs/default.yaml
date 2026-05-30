@@ -31,15 +31,15 @@ model:
 training:
   batch_size: 4
   num_epochs: 50
-  learning_rate: 1.0e-4
+  learning_rate: 1.0e-5  # Reduced from 1e-4 to prevent gradient explosion
   weight_decay: 1.0e-5
 
   # Learning rate schedule
   lr_scheduler: "cosine"
   warmup_epochs: 5
 
-  # Gradient clipping
-  grad_clip: 1.0
+  # Gradient clipping (more aggressive)
+  grad_clip: 0.5
 
   # Checkpointing
   save_every: 5
@@ -55,7 +55,7 @@ loss:
     loudness: 1.0
     spectral: 0.5
     dynamic: 0.5
-    perceptual: 0.1
+    perceptual: 0.1  # Re-enabled with CPU STFT for MPS compatibility
 
 # Optimizer configuration
 optimizer:

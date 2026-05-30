@@ -211,18 +211,55 @@ def train_epoch(
         optimizer.zero_grad()
         output = model(pre_master_batch, genre_idx)
 
+        # Check for NaN in output - this is CRITICAL
+        if torch.isnan(output).any():
+            print(f"\n[CRITICAL] NaN in output at epoch {epoch}, batch {batch_idx}!")
+            print(f"  Input range: [{pre_master_batch.min():.4f}, {pre_master_batch.max():.4f}]")
+            # Check which layer has NaN weights
+            for name, param in model.named_parameters():
+                if torch.isnan(param).any():
+                    print(f"  NaN in param: {name}")
+                    break
+            raise RuntimeError("NaN detected - stopping training to investigate")
+
         # Compute loss
         losses = criterion(output, target_batch, return_components=True)
+
+        # Check for NaN in loss
+        if torch.isnan(losses['total']) or torch.isinf(losses['total']):
+            print(f"\n[CRITICAL] NaN/Inf loss at epoch {epoch}, batch {batch_idx}: {losses['total'].item()}")
+            raise RuntimeError("NaN loss detected - stopping training")
 
         # Backward pass
         losses['total'].backward()
 
-        # Gradient clipping
-        if config['training'].get('grad_clip'):
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(),
-                config['training']['grad_clip']
-            )
+        # Check for NaN in gradients BEFORE clipping
+        max_grad = 0.0
+        has_nan_grad = False
+        for name, param in model.named_parameters():
+            if param.grad is not None:
+                grad_max = param.grad.abs().max().item()
+                if grad_max > max_grad:
+                    max_grad = grad_max
+                if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+                    has_nan_grad = True
+                    print(f"\n[WARNING] NaN/Inf gradient in {name} at batch {batch_idx} - skipping batch")
+                    break
+
+        if has_nan_grad:
+            # Skip this batch instead of crashing - zero gradients and continue
+            optimizer.zero_grad()
+            continue
+
+        # Log max gradient occasionally
+        if batch_idx % 50 == 0:
+            print(f" [grad_max={max_grad:.2f}]", end="")
+
+        # Gradient clipping (more aggressive)
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            model.parameters(),
+            config['training'].get('grad_clip', 0.5)
+        )
 
         optimizer.step()
 
@@ -274,7 +311,7 @@ def validate_epoch(
     num_batches = 0
 
     with torch.no_grad():
-        for batch in tqdm(val_loader, desc=f"Validation"):
+        for batch_idx, batch in enumerate(tqdm(val_loader, desc=f"Validation")):
             waveform = batch['waveform'].to(device)
             genre_idx = batch['genre_idx'].to(device)
 
@@ -292,8 +329,19 @@ def validate_epoch(
             # Forward pass
             output = model(pre_master_batch, genre_idx)
 
+            # Debug: print shapes and ranges on first batch
+            if batch_idx == 0 and epoch == 0:
+                print(f"\n[DEBUG] Validation batch 0:")
+                print(f"  pre_master: shape={pre_master_batch.shape}, range=[{pre_master_batch.min():.4f}, {pre_master_batch.max():.4f}]")
+                print(f"  target: shape={target_batch.shape}, range=[{target_batch.min():.4f}, {target_batch.max():.4f}]")
+                print(f"  output: shape={output.shape}, range=[{output.min():.4f}, {output.max():.4f}]")
+
             # Compute loss
             losses = criterion(output, target_batch, return_components=True)
+
+            # Debug: print losses on first batch
+            if batch_idx == 0 and epoch == 0:
+                print(f"  losses: total={losses['total'].item():.4f}, loudness={losses['loudness'].item():.4f}, spectral={losses['spectral'].item():.4f}, dynamic={losses['dynamic'].item():.4f}, perceptual={losses['perceptual'].item():.4f}")
 
             # Accumulate
             total_loss += losses['total'].item()

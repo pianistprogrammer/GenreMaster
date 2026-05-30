@@ -234,6 +234,7 @@ class MultibandCompressor(nn.Module):
             Compressed audio
         """
         batch, channels, samples = waveform.shape
+        eps = 1e-8
 
         # Simple RMS-based compression per band (approximation)
         output = torch.zeros_like(waveform)
@@ -243,10 +244,9 @@ class MultibandCompressor(nn.Module):
             high_freq = self.band_edges[band_idx + 1]
 
             # Extract band (simplified: use entire signal, scale by band weight)
-            # In full implementation, would use proper bandpass filtering
-            band_audio = waveform  # Simplified
+            band_audio = waveform
 
-            # Compute RMS envelope
+            # Compute RMS envelope with numerical stability
             window_size = int(0.01 * self.sr)  # 10ms windows
             rms = F.avg_pool1d(
                 band_audio.pow(2).view(batch * channels, 1, samples),
@@ -254,18 +254,24 @@ class MultibandCompressor(nn.Module):
                 stride=1,
                 padding=window_size // 2,
             ).sqrt().view(batch, channels, -1)
+            rms = rms.clamp(min=eps)  # Prevent division by zero
 
             # Apply compression
             for b in range(batch):
-                threshold = 10 ** (thresholds_db[b, band_idx] / 20.0)
-                ratio = ratios[b, band_idx]
+                threshold = 10 ** (thresholds_db[b, band_idx].clamp(min=-60, max=0) / 20.0)
+                threshold = max(threshold, eps)
+                ratio = ratios[b, band_idx].clamp(min=1.0, max=20.0)
 
-                # Gain reduction
+                # Gain reduction with numerical stability
+                ratio_factor = (1.0 / ratio) - 1.0
+                rms_ratio = (rms[b] / threshold).clamp(min=eps, max=100.0)
                 gain = torch.where(
                     rms[b] > threshold,
-                    (rms[b] / threshold) ** ((1.0 / ratio) - 1.0),
+                    rms_ratio ** ratio_factor,
                     torch.ones_like(rms[b]),
                 )
+                # Clamp gain to prevent extreme values
+                gain = gain.clamp(min=0.01, max=10.0)
 
                 # Pad gain to match audio length
                 if gain.shape[1] < samples:
@@ -311,15 +317,20 @@ class TruePeakLimiter(nn.Module):
 
         batch = waveform.shape[0]
         output = []
+        eps = 1e-8
 
         for b in range(batch):
             audio = waveform[b]
-            threshold = 10 ** (threshold_db[b].item() / 20.0)
-            ceiling = 10 ** (ceiling_db[b].item() / 20.0)
+            # Clamp threshold to reasonable range to prevent overflow
+            thresh_db_clamped = threshold_db[b].clamp(min=-60, max=0).item()
+            ceil_db_clamped = ceiling_db[b].clamp(min=-60, max=0).item()
+            threshold = max(10 ** (thresh_db_clamped / 20.0), eps)
+            ceiling = max(10 ** (ceil_db_clamped / 20.0), eps)
 
-            # Soft clipping using tanh
-            # tanh approximates hard clipping but is differentiable
-            limited = torch.tanh(audio / threshold) * threshold
+            # Soft clipping using tanh with numerical stability
+            # Clamp input to tanh to prevent extreme values
+            scaled_audio = (audio / threshold).clamp(min=-10, max=10)
+            limited = torch.tanh(scaled_audio) * threshold
 
             # Scale to ceiling
             limited = limited * (ceiling / threshold)
