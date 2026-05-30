@@ -1,0 +1,87 @@
+# GenreMaster V2 Training Configuration (Transformer-based)
+
+# Experiment metadata
+experiment:
+  name: "genremaster-v2-gtzan"
+  description: "Genre-conditioned mastering with Transformer encoder"
+  seed: 42
+
+# Dataset configuration
+data:
+  dataset: "gtzan"
+  root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
+  audio_dir: "/Volumes/LLModels/Datasets/gtzan"
+  sample_rate: 22050
+  duration: 30.0
+  n_genres: 10
+  target_lufs: -18.0
+  augment_train: true
+
+# Model configuration (V2)
+model:
+  version: "v2"
+  encoder_type: "transformer"  # New transformer encoder
+  d_model: 256
+  n_heads: 8
+  n_encoder_layers: 4
+  audio_feature_dim: 512
+  genre_latent_dim: 128
+  use_residual: true  # Learnable residual connection
+  conditioned: true
+  n_genres: 10
+
+# Training configuration
+training:
+  batch_size: 4
+  num_epochs: 50
+  learning_rate: 5.0e-5  # Lower for transformer
+  weight_decay: 1.0e-4
+
+  # Learning rate schedule
+  lr_scheduler: "cosine"
+  warmup_epochs: 5
+
+  # Gradient clipping
+  grad_clip: 1.0
+
+  # Checkpointing
+  save_every: 5
+  keep_last_n: 3
+
+  # Early stopping
+  patience: 15
+  min_delta: 1.0e-4
+
+# Loss configuration
+loss:
+  weights:
+    loudness: 1.0
+    spectral: 0.5
+    dynamic: 0.5
+    perceptual: 0.1
+
+# Optimizer configuration
+optimizer:
+  name: "adamw"
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+# Device configuration
+device:
+  type: "auto"
+  num_workers: 0
+
+# Logging configuration
+logging:
+  use_trackio: true
+  log_every: 10
+  save_audio_every: 100
+  trackio:
+    project: "genremaster"
+    experiment: "v2-transformer"
+
+# Output paths
+output:
+  checkpoint_dir: "results/checkpoints_v2"
+  log_dir: "results/logs"
+  audio_dir: "results/audio_samples_v2"
