@@ -1,24 +1,19 @@
-# GenreMaster Default Training Configuration
+# GenreMaster Training Configuration (GTZAN Dataset)
 
 # Experiment metadata
 experiment:
-  name: "genremaster-main"
-  description: "Genre-conditioned automatic mastering"
+  name: "genremaster-gtzan"
+  description: "Genre-conditioned automatic mastering with GTZAN"
   seed: 42
 
 # Dataset configuration
 data:
+  dataset: "gtzan"  # Use GTZAN instead of FMA
   root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
-  audio_dir: "/Volumes/LLModels/Datasets/fma_small"
-  sample_rate: 44100
+  audio_dir: "/Volumes/LLModels/Datasets/gtzan"
+  sample_rate: 22050  # GTZAN native sample rate
   duration: 30.0  # seconds
-  top_k_genres: 16
-  samples_per_genre: 1500
-
-  # For quick testing, set n_train_samples to limit dataset size
-  # Set to null for full dataset
-  n_train_samples: null  # Use all available samples (6,861 train)
-  n_val_samples: null    # Use all available samples (852 val)
+  n_genres: 10
 
   # Pre-master simulation
   target_lufs: -18.0
@@ -30,27 +25,28 @@ model:
   audio_feature_dim: 512
   genre_latent_dim: 128
   conditioned: true  # Set false for unconditioned baseline
+  n_genres: 10  # GTZAN has 10 genres
 
 # Training configuration
 training:
   batch_size: 4
-  num_epochs: 50  # Start with 50 epochs for testing
+  num_epochs: 50
   learning_rate: 1.0e-4
   weight_decay: 1.0e-5
 
   # Learning rate schedule
-  lr_scheduler: "cosine"  # or "step", "none"
+  lr_scheduler: "cosine"
   warmup_epochs: 5
 
   # Gradient clipping
   grad_clip: 1.0
 
   # Checkpointing
-  save_every: 5  # Save checkpoint every N epochs
-  keep_last_n: 3  # Keep only last N checkpoints
+  save_every: 5
+  keep_last_n: 3
 
   # Early stopping
-  patience: 15  # Stop if no improvement for N epochs
+  patience: 15
   min_delta: 1.0e-4
 
 # Loss configuration
@@ -63,25 +59,24 @@ loss:
 
 # Optimizer configuration
 optimizer:
-  name: "adam"  # or "adamw", "sgd"
+  name: "adam"
   betas: [0.9, 0.999]
   eps: 1.0e-8
 
 # Device configuration
 device:
-  type: "auto"  # auto-detect, or "cuda", "mps", "cpu"
-  num_workers: 0  # DataLoader workers (0 = single-threaded)
+  type: "auto"
+  num_workers: 0
 
 # Logging configuration
 logging:
   use_trackio: true
-  log_every: 10  # Log metrics every N steps
-  save_audio_every: 100  # Save audio samples every N steps
+  log_every: 10
+  save_audio_every: 100
 
-  # Trackio config
   trackio:
     project: "genremaster"
-    experiment: "main-training"
+    experiment: "gtzan-mastering"
 
 # Output paths
 output:

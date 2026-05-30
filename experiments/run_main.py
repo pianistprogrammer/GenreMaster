@@ -16,6 +16,10 @@ import warnings
 
 # Filter PyTorch STFT resize warnings (harmless deprecation warnings)
 warnings.filterwarnings('ignore', message='.*An output with one or more elements was resized.*')
+# Filter pyloudnorm clipping warnings (expected during normalization)
+warnings.filterwarnings('ignore', message='.*Possible clipped samples in output.*')
+# Filter trackio reserved keys warning
+warnings.filterwarnings('ignore', message='.*Reserved keys renamed.*')
 
 import torch
 import torch.nn as nn
@@ -26,6 +30,7 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from data.fma import setup_fma_medium
+from data.gtzan import setup_gtzan, GTZAN_GENRES
 from data.transforms import create_premaster_transforms
 from models.genremaster import create_genremaster_model
 from losses import create_loss_function
@@ -35,10 +40,24 @@ import trackio
 
 def collate_fn(batch):
     """Custom collate function for variable-length audio."""
-    min_length = min(item['waveform'].shape[1] for item in batch)
-    waveforms = torch.stack([item['waveform'][:, :min_length] for item in batch])
+    # Ensure all waveforms have the same number of channels (convert to mono if needed)
+    processed_waveforms = []
+    for item in batch:
+        waveform = item['waveform']
+        # Convert to mono if stereo
+        if waveform.shape[0] > 1:
+            waveform = waveform.mean(dim=0, keepdim=True)
+        processed_waveforms.append(waveform)
+
+    min_length = min(w.shape[1] for w in processed_waveforms)
+    waveforms = torch.stack([w[:, :min_length] for w in processed_waveforms])
     genre_indices = torch.tensor([item['genre_idx'] for item in batch])
-    track_ids = [item['track_id'] for item in batch]
+
+    # Handle both FMA (track_id) and GTZAN (file_name)
+    if 'track_id' in batch[0]:
+        track_ids = [item['track_id'] for item in batch]
+    else:
+        track_ids = [item.get('file_name', f'track_{i}') for i, item in enumerate(batch)]
 
     return {
         'waveform': waveforms,
@@ -56,13 +75,23 @@ def load_config(config_path: str) -> Dict:
 
 def create_dataloaders(config: Dict):
     """Create train and validation dataloaders."""
-    # Setup dataset
-    datasets, genre_to_idx = setup_fma_medium(
-        data_root=Path(config['data']['root_dir']),
-        audio_dir=Path(config['data']['audio_dir']),
-        top_k_genres=config['data']['top_k_genres'],
-        samples_per_genre=config['data']['samples_per_genre'],
-    )
+    dataset_type = config['data'].get('dataset', 'fma')
+
+    if dataset_type.lower() == 'gtzan':
+        # Use GTZAN dataset
+        datasets, genre_to_idx = setup_gtzan(
+            audio_dir=Path(config['data']['audio_dir']),
+            sr=config['data'].get('sample_rate', 22050),
+            duration=config['data'].get('duration', 30.0),
+        )
+    else:
+        # Use FMA dataset
+        datasets, genre_to_idx = setup_fma_medium(
+            data_root=Path(config['data']['root_dir']),
+            audio_dir=Path(config['data']['audio_dir']),
+            top_k_genres=config['data'].get('top_k_genres', 8),
+            samples_per_genre=config['data'].get('samples_per_genre'),
+        )
 
     # Limit dataset size if specified
     if config['data'].get('n_train_samples'):
