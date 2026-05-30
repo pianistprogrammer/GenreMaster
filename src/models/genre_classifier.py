@@ -279,6 +279,8 @@ def train_genre_classifier(
     num_epochs: int = 20,
     lr: float = 1e-3,
     device: str = "mps",
+    save_path: str = "results/genre_classifier_best.pt",
+    patience: int = 10,
 ):
     """
     Train the genre classifier.
@@ -290,8 +292,14 @@ def train_genre_classifier(
         num_epochs: Number of epochs
         lr: Learning rate
         device: Device to train on
+        save_path: Path to save best model
+        patience: Early stopping patience (epochs without improvement)
     """
+    from pathlib import Path
     from tqdm import tqdm
+
+    # Ensure output directory exists
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
 
     classifier = classifier.to(device)
     criterion = nn.CrossEntropyLoss()
@@ -299,6 +307,7 @@ def train_genre_classifier(
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, num_epochs)
 
     best_acc = 0.0
+    epochs_without_improvement = 0
 
     for epoch in range(num_epochs):
         # Training
@@ -354,8 +363,14 @@ def train_genre_classifier(
         # Save best model
         if val_acc > best_acc:
             best_acc = val_acc
-            torch.save(classifier.state_dict(), 'results/genre_classifier_best.pt')
+            epochs_without_improvement = 0
+            torch.save(classifier.state_dict(), save_path)
             print(f"  ✓ New best model! Val Acc={val_acc:.2f}%")
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= patience:
+                print(f"\nEarly stopping: no improvement for {patience} epochs")
+                break
 
         scheduler.step()
 

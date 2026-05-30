@@ -1,0 +1,53 @@
+# Genre Classifier Configuration (GTZAN - 10 Genres)
+
+# Data configuration
+data:
+  dataset: "gtzan"  # Use GTZAN instead of FMA
+  audio_dir: "/Volumes/LLModels/Datasets/gtzan"
+  root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
+  sample_rate: 22050  # GTZAN native sample rate
+  duration: 30.0
+  n_genres: 10  # GTZAN has 10 genres
+  train_ratio: 0.8
+  val_ratio: 0.1
+
+# Training configuration
+training:
+  batch_size: 16  # Smaller batch for limited dataset
+  num_epochs: 30  # More epochs for small dataset
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+
+  # Learning rate schedule
+  lr_scheduler: "cosine"
+  warmup_epochs: 3
+
+  # Checkpointing
+  save_every: 5
+  keep_last_n: 3
+
+  # Early stopping
+  patience: 10
+  min_delta: 1.0e-4
+
+# Model configuration
+model:
+  n_genres: 10
+  n_mels: 128
+  dropout: 0.3
+
+# Optimizer configuration
+optimizer:
+  name: "adam"
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+# Device configuration
+device:
+  type: "auto"
+  num_workers: 0
+
+# Output paths
+output:
+  checkpoint_dir: "results"
+  model_name: "genre_classifier_gtzan_best.pt"
