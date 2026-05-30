@@ -7,6 +7,7 @@ and integrated into GenreMaster for automatic genre detection.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchaudio.transforms as T
 
 
 class GenreCNNClassifier(nn.Module):
@@ -28,6 +29,7 @@ class GenreCNNClassifier(nn.Module):
         n_genres: int = 8,
         n_mels: int = 128,
         dropout: float = 0.3,
+        sample_rate: int = 22050,
     ):
         """
         Initialize genre classifier.
@@ -36,10 +38,21 @@ class GenreCNNClassifier(nn.Module):
             n_genres: Number of genre classes (8 for FMA Small)
             n_mels: Number of mel bands (128 default)
             dropout: Dropout rate for regularization
+            sample_rate: Audio sample rate for mel spectrogram
         """
         super().__init__()
 
         self.n_genres = n_genres
+        self.n_mels = n_mels
+        self.sample_rate = sample_rate
+
+        # Mel spectrogram transform (registered as buffer, not parameter)
+        self.mel_transform = T.MelSpectrogram(
+            sample_rate=sample_rate,
+            n_fft=2048,
+            hop_length=512,
+            n_mels=n_mels,
+        )
 
         # Convolutional blocks
         # Input: [batch, 1, time, n_mels]
@@ -112,21 +125,15 @@ class GenreCNNClassifier(nn.Module):
         # If raw audio, convert to spectrogram
         if spectrogram.ndim == 3:
             # Raw audio input - compute log-mel spectrogram
-            import torchaudio.transforms as T
-
             # Convert to mono
-            audio = spectrogram.mean(dim=1, keepdim=True)  # [batch, 1, samples]
+            audio = spectrogram.mean(dim=1)  # [batch, samples]
 
-            # Compute mel spectrogram
-            mel_transform = T.MelSpectrogram(
-                sample_rate=44100,
-                n_fft=2048,
-                hop_length=512,
-                n_mels=128,
-            ).to(audio.device)
+            # Ensure mel_transform is on the same device
+            if self.mel_transform.mel_scale.fb.device != audio.device:
+                self.mel_transform = self.mel_transform.to(audio.device)
 
             # Apply transform
-            mel_spec = mel_transform(audio.squeeze(1))  # [batch, n_mels, time]
+            mel_spec = self.mel_transform(audio)  # [batch, n_mels, time]
 
             # Convert to log scale
             spectrogram = torch.log(mel_spec + 1e-9)
@@ -281,6 +288,9 @@ def train_genre_classifier(
     device: str = "mps",
     save_path: str = "results/genre_classifier_best.pt",
     patience: int = 10,
+    use_trackio: bool = False,
+    log_every: int = 10,
+    history_path: str = None,
 ):
     """
     Train the genre classifier.
@@ -294,12 +304,20 @@ def train_genre_classifier(
         device: Device to train on
         save_path: Path to save best model
         patience: Early stopping patience (epochs without improvement)
+        use_trackio: Whether to log metrics to Trackio
+        log_every: Log metrics every N batches
+        history_path: Path to save training history JSON
     """
+    import json
     from pathlib import Path
     from tqdm import tqdm
 
     # Ensure output directory exists
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+
+    # Set default history path if not provided
+    if history_path is None:
+        history_path = Path(save_path).parent / "classifier_history.json"
 
     classifier = classifier.to(device)
     criterion = nn.CrossEntropyLoss()
@@ -309,6 +327,23 @@ def train_genre_classifier(
     best_acc = 0.0
     epochs_without_improvement = 0
 
+    # Training history for plotting
+    history = {
+        'train_loss': [],
+        'train_acc': [],
+        'val_loss': [],
+        'val_acc': [],
+        'lr': [],
+        'epoch': [],
+        'best_val_acc': 0.0,
+        'config': {
+            'num_epochs': num_epochs,
+            'lr': lr,
+            'patience': patience,
+            'device': str(device),
+        }
+    }
+
     for epoch in range(num_epochs):
         # Training
         classifier.train()
@@ -316,7 +351,7 @@ def train_genre_classifier(
         train_correct = 0
         train_total = 0
 
-        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
+        for batch_idx, batch in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")):
             waveform = batch['waveform'].to(device)
             genre_idx = batch['genre_idx'].to(device)
 
@@ -335,7 +370,18 @@ def train_genre_classifier(
             train_correct += (pred == genre_idx).sum().item()
             train_total += genre_idx.size(0)
 
+            # Log to Trackio
+            if use_trackio and batch_idx % log_every == 0:
+                import trackio
+                step = epoch * len(train_loader) + batch_idx
+                trackio.log({
+                    'classifier/train_loss': loss.item(),
+                    'classifier/lr': optimizer.param_groups[0]['lr'],
+                    'epoch': epoch,
+                }, step=step)
+
         train_acc = 100.0 * train_correct / train_total
+        avg_train_loss = train_loss / len(train_loader)
 
         # Validation
         classifier.eval()
@@ -357,12 +403,35 @@ def train_genre_classifier(
                 val_total += genre_idx.size(0)
 
         val_acc = 100.0 * val_correct / val_total
+        avg_val_loss = val_loss / len(val_loader)
+        current_lr = optimizer.param_groups[0]['lr']
 
-        print(f"Epoch {epoch+1}: Train Acc={train_acc:.2f}%, Val Acc={val_acc:.2f}%")
+        print(f"Epoch {epoch+1}: Train Loss={avg_train_loss:.4f}, Train Acc={train_acc:.2f}%, Val Loss={avg_val_loss:.4f}, Val Acc={val_acc:.2f}%")
+
+        # Record history
+        history['epoch'].append(epoch + 1)
+        history['train_loss'].append(avg_train_loss)
+        history['train_acc'].append(train_acc)
+        history['val_loss'].append(avg_val_loss)
+        history['val_acc'].append(val_acc)
+        history['lr'].append(current_lr)
+
+        # Log epoch metrics to Trackio
+        if use_trackio:
+            import trackio
+            trackio.log({
+                'classifier/train_acc': train_acc,
+                'classifier/val_acc': val_acc,
+                'classifier/train_loss_epoch': avg_train_loss,
+                'classifier/val_loss_epoch': avg_val_loss,
+                'classifier/best_val_acc': best_acc,
+                'epoch': epoch,
+            }, step=(epoch + 1) * len(train_loader))
 
         # Save best model
         if val_acc > best_acc:
             best_acc = val_acc
+            history['best_val_acc'] = best_acc
             epochs_without_improvement = 0
             torch.save(classifier.state_dict(), save_path)
             print(f"  ✓ New best model! Val Acc={val_acc:.2f}%")
@@ -371,6 +440,10 @@ def train_genre_classifier(
             if epochs_without_improvement >= patience:
                 print(f"\nEarly stopping: no improvement for {patience} epochs")
                 break
+
+        # Save history after each epoch
+        with open(history_path, 'w') as f:
+            json.dump(history, f, indent=2)
 
         scheduler.step()
 
