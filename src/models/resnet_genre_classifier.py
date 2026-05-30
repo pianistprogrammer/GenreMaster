@@ -204,6 +204,153 @@ class ResNetGenreClassifier(nn.Module):
         logits = self(waveform)
         return F.softmax(logits, dim=1)
 
+    @torch.no_grad()
+    def predict_with_segments(
+        self,
+        waveform: torch.Tensor,
+        segment_seconds: float = 3.0,
+        hop_seconds: float = 1.5,
+        aggregation: str = "soft_vote",
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Predict with segment-level voting for improved accuracy.
+
+        Splits audio into overlapping segments, classifies each,
+        and aggregates via voting.
+
+        Args:
+            waveform: Audio [batch, channels, samples]
+            segment_seconds: Duration of each segment
+            hop_seconds: Hop between segments (overlap = segment - hop)
+            aggregation: 'soft_vote' (average probs) or 'hard_vote' (majority)
+
+        Returns:
+            predictions: Genre indices [batch]
+            probabilities: Genre probabilities [batch, n_genres]
+        """
+        self.eval()
+
+        if waveform.dim() == 2:
+            waveform = waveform.unsqueeze(0)
+
+        batch_size, channels, total_samples = waveform.shape
+        segment_samples = int(segment_seconds * self.sample_rate)
+        hop_samples = int(hop_seconds * self.sample_rate)
+
+        # Extract segments
+        segments = []
+        for start in range(0, total_samples - segment_samples + 1, hop_samples):
+            segment = waveform[:, :, start:start + segment_samples]
+            segments.append(segment)
+
+        if not segments:
+            segments = [waveform]
+
+        # Process all segments
+        all_logits = []
+        for segment in segments:
+            logits = self(segment)
+            all_logits.append(logits)
+
+        # Stack: [n_segments, batch, n_genres]
+        all_logits = torch.stack(all_logits, dim=0)
+
+        # Aggregate
+        if aggregation == "hard_vote":
+            preds = all_logits.argmax(dim=2)  # [n_segments, batch]
+            final_pred = torch.mode(preds, dim=0).values
+            probs = F.softmax(all_logits.mean(dim=0), dim=1)
+        else:  # soft_vote
+            probs = F.softmax(all_logits, dim=2).mean(dim=0)
+            final_pred = probs.argmax(dim=1)
+
+        return final_pred, probs
+
+    @torch.no_grad()
+    def predict_with_tta(
+        self,
+        waveform: torch.Tensor,
+        n_augments: int = 5,
+        use_segments: bool = True,
+        segment_seconds: float = 3.0,
+        hop_seconds: float = 1.5,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Predict with Test-Time Augmentation (TTA) for maximum accuracy.
+
+        Applies multiple augmentations at inference and averages predictions.
+
+        Args:
+            waveform: Audio [batch, channels, samples]
+            n_augments: Number of augmented versions to average
+            use_segments: Also use segment voting
+            segment_seconds: Segment duration if using segments
+            hop_seconds: Hop duration if using segments
+
+        Returns:
+            predictions: Genre indices [batch]
+            probabilities: Genre probabilities [batch, n_genres]
+        """
+        self.eval()
+
+        if waveform.dim() == 2:
+            waveform = waveform.unsqueeze(0)
+
+        batch_size = waveform.shape[0]
+        all_probs = []
+
+        # Original prediction
+        if use_segments:
+            _, probs = self.predict_with_segments(
+                waveform, segment_seconds, hop_seconds
+            )
+        else:
+            probs = self.predict_proba(waveform)
+        all_probs.append(probs)
+
+        # Augmented predictions
+        for i in range(n_augments - 1):
+            aug_waveform = self._apply_tta_augmentation(waveform, i)
+            if use_segments:
+                _, probs = self.predict_with_segments(
+                    aug_waveform, segment_seconds, hop_seconds
+                )
+            else:
+                probs = self.predict_proba(aug_waveform)
+            all_probs.append(probs)
+
+        # Average probabilities
+        avg_probs = torch.stack(all_probs, dim=0).mean(dim=0)
+        predictions = avg_probs.argmax(dim=1)
+
+        return predictions, avg_probs
+
+    def _apply_tta_augmentation(
+        self,
+        waveform: torch.Tensor,
+        aug_idx: int,
+    ) -> torch.Tensor:
+        """Apply TTA augmentation based on index."""
+        # Different augmentations for variety
+        if aug_idx == 0:
+            # Time shift (roll)
+            shift = int(0.1 * waveform.shape[-1])
+            return torch.roll(waveform, shifts=shift, dims=-1)
+        elif aug_idx == 1:
+            # Time shift (other direction)
+            shift = int(-0.1 * waveform.shape[-1])
+            return torch.roll(waveform, shifts=shift, dims=-1)
+        elif aug_idx == 2:
+            # Slight gain change
+            return waveform * 0.9
+        elif aug_idx == 3:
+            # Slight gain change (other direction)
+            return waveform * 1.1
+        else:
+            # Small noise
+            noise = torch.randn_like(waveform) * 0.005
+            return waveform + noise
+
 
 class MixupAugmentation:
     """

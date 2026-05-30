@@ -14,13 +14,13 @@ data:
 # Training configuration
 training:
   batch_size: 16
-  num_epochs: 100
-  learning_rate: 3.0e-4
+  num_epochs: 200
+  learning_rate: 1.0e-4
   weight_decay: 1.0e-4
 
   # Learning rate schedule
   lr_scheduler: "cosine_warmup"
-  warmup_epochs: 5
+  warmup_epochs: 10
 
   # Augmentation
   use_mixup: true
@@ -34,7 +34,7 @@ training:
   keep_last_n: 3
 
   # Early stopping
-  patience: 20
+  patience: 40
   min_delta: 1.0e-4
 
   # Gradient clipping
