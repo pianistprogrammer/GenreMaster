@@ -154,6 +154,8 @@ class ImprovedDSPChain(nn.Module):
     - Per-band compression with soft-knee
     - Parallel saturation for warmth
     - True peak limiting with lookahead approximation
+
+    NOTE: Some operations run on CPU for MPS compatibility, then move back.
     """
 
     def __init__(self, sample_rate: int = 22050, n_bands: int = 4):
@@ -161,150 +163,48 @@ class ImprovedDSPChain(nn.Module):
         self.sr = sample_rate
         self.n_bands = n_bands
 
-        # Crossover frequencies for multiband (in Hz)
+        # Pre-compute EQ center frequencies on CPU (MPS doesn't support logspace)
         self.register_buffer(
-            'crossover_freqs',
-            torch.tensor([100.0, 500.0, 2000.0, 8000.0])[:n_bands]
-        )
-
-    def multiband_split(self, x: torch.Tensor) -> list:
-        """Split audio into frequency bands using FFT filtering."""
-        # FFT-based band splitting for differentiability
-        n_fft = 2048
-        hop = n_fft // 4
-        window = torch.hann_window(n_fft, device=x.device)
-
-        # Pad input
-        x_mono = x.mean(dim=1) if x.dim() == 3 else x
-        if x.dim() == 3:
-            x_mono = x.squeeze(1)
-
-        # STFT
-        stft = torch.stft(
-            x_mono, n_fft=n_fft, hop_length=hop,
-            window=window, return_complex=True
-        )
-
-        freqs = torch.fft.rfftfreq(n_fft, 1/self.sr).to(x.device)
-        bands = []
-
-        prev_freq = 0.0
-        for i, cf in enumerate(self.crossover_freqs):
-            # Create band mask
-            if i < len(self.crossover_freqs) - 1:
-                mask = ((freqs >= prev_freq) & (freqs < cf)).float()
-            else:
-                mask = (freqs >= prev_freq).float()
-
-            # Smooth mask edges
-            mask = mask.unsqueeze(0).unsqueeze(-1)
-
-            # Apply mask and inverse STFT
-            band_stft = stft * mask
-            band_audio = torch.istft(
-                band_stft, n_fft=n_fft, hop_length=hop,
-                window=window, length=x_mono.shape[-1]
+            'eq_center_freqs',
+            torch.logspace(
+                torch.log10(torch.tensor(60.0)),
+                torch.log10(torch.tensor(16000.0)),
+                8
             )
-            bands.append(band_audio.unsqueeze(1))
-            prev_freq = cf
-
-        return bands
-
-    def soft_knee_compress(
-        self,
-        x: torch.Tensor,
-        threshold: torch.Tensor,
-        ratio: torch.Tensor,
-        knee_width: float = 6.0,
-    ) -> torch.Tensor:
-        """Apply soft-knee compression."""
-        eps = 1e-8
-
-        # Compute envelope (RMS)
-        window_size = int(0.01 * self.sr)
-        x_sq = x.pow(2)
-        if x_sq.dim() == 2:
-            x_sq = x_sq.unsqueeze(1)
-        envelope = F.avg_pool1d(
-            x_sq, kernel_size=window_size, stride=1,
-            padding=window_size // 2
-        ).sqrt().squeeze(1)
-        envelope = envelope.clamp(min=eps)
-
-        # Convert to dB
-        env_db = 20 * torch.log10(envelope + eps)
-
-        # Soft knee gain computation
-        threshold_db = threshold
-        knee_start = threshold_db - knee_width / 2
-        knee_end = threshold_db + knee_width / 2
-
-        # Below knee: no compression
-        # In knee: gradual compression
-        # Above knee: full compression
-        gain_db = torch.zeros_like(env_db)
-
-        # Above threshold
-        above = env_db > knee_end
-        gain_db = torch.where(
-            above,
-            threshold_db + (env_db - threshold_db) / ratio - env_db,
-            gain_db
         )
-
-        # In knee region (soft transition)
-        in_knee = (env_db >= knee_start) & (env_db <= knee_end)
-        knee_factor = (env_db - knee_start) / (knee_width + eps)
-        knee_gain = (knee_factor.pow(2) * (1/ratio - 1) * (env_db - threshold_db)) / 2
-        gain_db = torch.where(in_knee, knee_gain, gain_db)
-
-        # Convert gain to linear and apply
-        gain_linear = (10 ** (gain_db / 20)).clamp(min=0.01, max=10.0)
-
-        # Match dimensions
-        if gain_linear.dim() < x.dim():
-            gain_linear = gain_linear.unsqueeze(1)
-        if gain_linear.shape[-1] != x.shape[-1]:
-            gain_linear = F.interpolate(
-                gain_linear.unsqueeze(1) if gain_linear.dim() == 2 else gain_linear,
-                size=x.shape[-1], mode='linear', align_corners=False
-            ).squeeze(1)
-
-        return x * gain_linear
 
     def apply_eq(
         self, x: torch.Tensor, gains_db: torch.Tensor
     ) -> torch.Tensor:
-        """Apply parametric EQ using FFT."""
+        """Apply parametric EQ using FFT. Runs on CPU for MPS compatibility."""
+        original_device = x.device
+
+        # Move to CPU for STFT operations (MPS has issues with STFT backward)
+        x_cpu = x.cpu()
+        gains_cpu = gains_db.cpu()
+
         n_fft = 2048
         hop = n_fft // 4
-        window = torch.hann_window(n_fft, device=x.device)
+        window = torch.hann_window(n_fft)
 
-        x_mono = x.squeeze(1) if x.dim() == 3 else x
+        x_mono = x_cpu.squeeze(1) if x_cpu.dim() == 3 else x_cpu
 
-        # STFT
+        # STFT on CPU
         stft = torch.stft(
             x_mono, n_fft=n_fft, hop_length=hop,
             window=window, return_complex=True
         )
 
-        freqs = torch.fft.rfftfreq(n_fft, 1/self.sr).to(x.device)
-
-        # EQ bands (8 bands log-spaced) - computed on CPU for MPS compatibility
-        center_freqs_cpu = torch.logspace(
-            torch.log10(torch.tensor(60.0)),
-            torch.log10(torch.tensor(16000.0)),
-            8
-        )
-        center_freqs = center_freqs_cpu.to(x.device)
+        freqs = torch.fft.rfftfreq(n_fft, 1/self.sr)
+        center_freqs = self.eq_center_freqs.cpu()
 
         # Build EQ curve
-        eq_curve = torch.ones(x.shape[0], len(freqs), 1, device=x.device)
+        eq_curve = torch.ones(x_cpu.shape[0], len(freqs), 1)
 
         for i, cf in enumerate(center_freqs):
             bandwidth = cf / 2.0
             band_response = torch.exp(-((freqs - cf) ** 2) / (2 * bandwidth ** 2))
-            gain_linear = 10 ** (gains_db[:, i:i+1] / 20.0)
+            gain_linear = 10 ** (gains_cpu[:, i:i+1] / 20.0)
             eq_curve = eq_curve + (gain_linear.unsqueeze(-1) - 1) * band_response.unsqueeze(0).unsqueeze(-1)
 
         # Apply EQ
@@ -316,48 +216,111 @@ class ImprovedDSPChain(nn.Module):
             window=window, length=x_mono.shape[-1]
         )
 
-        return output.unsqueeze(1) if x.dim() == 3 else output
+        output = output.unsqueeze(1) if x.dim() == 3 else output
 
-    def soft_clip(self, x: torch.Tensor, threshold: float = 0.9) -> torch.Tensor:
-        """Soft clipping for limiting."""
+        # Move back to original device
+        return output.to(original_device)
+
+    def soft_knee_compress(
+        self,
+        x: torch.Tensor,
+        threshold_db: torch.Tensor,
+        ratio: torch.Tensor,
+        knee_width: float = 6.0,
+    ) -> torch.Tensor:
+        """Apply soft-knee compression. Fully differentiable, MPS compatible."""
+        eps = 1e-8
+
+        # Compute RMS envelope
+        window_size = max(int(0.01 * self.sr), 1)
+
+        x_sq = x.pow(2)
+        if x_sq.dim() == 2:
+            x_sq = x_sq.unsqueeze(1)
+
+        # Use unfold + mean instead of avg_pool1d for better MPS compatibility
+        # Pad first
+        pad_size = window_size // 2
+        x_padded = F.pad(x_sq, (pad_size, pad_size), mode='reflect')
+
+        # Simple moving average using conv1d with fixed weights
+        kernel = torch.ones(1, 1, window_size, device=x.device) / window_size
+        envelope = F.conv1d(x_padded, kernel, groups=1).sqrt()
+
+        # Trim to original size
+        if envelope.shape[-1] > x.shape[-1]:
+            envelope = envelope[..., :x.shape[-1]]
+        elif envelope.shape[-1] < x.shape[-1]:
+            envelope = F.pad(envelope, (0, x.shape[-1] - envelope.shape[-1]))
+
+        envelope = envelope.squeeze(1) if x.dim() == 2 else envelope
+        envelope = envelope.clamp(min=eps)
+
+        # Convert to dB
+        env_db = 20 * torch.log10(envelope + eps)
+
+        # Threshold in dB (reshape for broadcasting)
+        threshold_db = threshold_db.view(-1, 1, 1) if x.dim() == 3 else threshold_db.view(-1, 1)
+        ratio = ratio.view(-1, 1, 1) if x.dim() == 3 else ratio.view(-1, 1)
+
+        # Soft knee compression
+        knee_start = threshold_db - knee_width / 2
+        knee_end = threshold_db + knee_width / 2
+
+        # Gain reduction calculation
+        gain_db = torch.zeros_like(env_db)
+
+        # Above knee: full compression
+        above = env_db > knee_end
+        gain_db = torch.where(
+            above,
+            threshold_db + (env_db - threshold_db) / ratio - env_db,
+            gain_db
+        )
+
+        # In knee region: gradual compression
+        in_knee = (env_db >= knee_start) & (env_db <= knee_end)
+        knee_factor = (env_db - knee_start) / (knee_width + eps)
+        knee_gain = (knee_factor.pow(2) * (1/ratio - 1) * (env_db - threshold_db)) / 2
+        gain_db = torch.where(in_knee, knee_gain, gain_db)
+
+        # Convert to linear gain and apply
+        gain_linear = (10 ** (gain_db / 20)).clamp(min=0.01, max=10.0)
+
+        return x * gain_linear
+
+    def soft_clip(self, x: torch.Tensor, threshold: torch.Tensor) -> torch.Tensor:
+        """Soft clipping using tanh. MPS compatible."""
+        # Reshape threshold for broadcasting
+        if threshold.dim() == 2:
+            threshold = threshold.unsqueeze(-1)
+        threshold = threshold.clamp(min=0.1, max=1.0)
         return torch.tanh(x / threshold) * threshold
 
     def forward(
         self, waveform: torch.Tensor, params: Dict[str, torch.Tensor]
     ) -> torch.Tensor:
         """Apply full mastering chain."""
-        batch_size = waveform.shape[0]
-
-        # 1. EQ
+        # 1. Parametric EQ (runs on CPU, returns to MPS)
         x = self.apply_eq(waveform, params['eq_gains'])
 
-        # 2. Simplified compression (avoid in-place ops)
-        # Use a simple soft-knee approach that's fully differentiable
-        threshold_linear = 10 ** (params['comp_thresholds'][:, 0:1] / 20.0)
-        threshold_linear = threshold_linear.unsqueeze(-1)  # [B, 1, 1]
+        # 2. Multiband compression (simplified to single-band for stability)
+        x = self.soft_knee_compress(
+            x,
+            params['comp_thresholds'][:, 0],  # Use first band
+            params['comp_ratios'][:, 0].clamp(min=1.1, max=20.0),
+        )
 
-        # Soft compression using tanh-based curve
-        ratio = params['comp_ratios'][:, 0:1].clamp(min=1.1, max=20.0).unsqueeze(-1)
+        # 3. True peak limiting
+        x = self.soft_clip(x, 10 ** (params['limiter_threshold'] / 20.0))
 
-        # Compute gain reduction
-        x_abs = x.abs().clamp(min=1e-8)
-        above_threshold = (x_abs > threshold_linear).float()
-        compression_amount = above_threshold * (1.0 - 1.0/ratio) * (x_abs - threshold_linear) / (x_abs + 1e-8)
-        x = x * (1.0 - compression_amount.clamp(min=0, max=0.9))
-
-        # 3. Soft limiting (no in-place)
-        threshold = 10 ** (params['limiter_threshold'] / 20.0)
-        threshold = threshold.unsqueeze(-1).clamp(min=0.1, max=1.0)  # [B, 1, 1]
-        x = torch.tanh(x / threshold) * threshold
-
-        # 4. Output gain normalization
-        target_rms = 10 ** (params['target_lufs'] / 20.0) * 0.1
-        target_rms = target_rms.unsqueeze(-1)  # [B, 1, 1]
+        # 4. Output gain normalization to target loudness
+        target_rms = (10 ** (params['target_lufs'] / 20.0) * 0.1).unsqueeze(-1)
         current_rms = x.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp(min=1e-8)
         gain = (target_rms / current_rms).clamp(min=0.1, max=10.0)
         x = x * gain
 
-        # Ensure output is in valid range
+        # Final clipping to valid range
         x = x.clamp(min=-1.0, max=1.0)
 
         return x
