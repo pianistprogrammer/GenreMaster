@@ -16,18 +16,21 @@ import warnings
 
 # Filter PyTorch STFT resize warnings (harmless deprecation warnings)
 warnings.filterwarnings('ignore', message='.*An output with one or more elements was resized.*')
+# Filter pyloudnorm clipping warnings (expected during normalization)
+warnings.filterwarnings('ignore', message='.*Possible clipped samples in output.*')
+# Filter trackio reserved keys warning
+warnings.filterwarnings('ignore', message='.*Reserved keys renamed.*')
 
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
-import numpy as np
 from tqdm import tqdm
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from data.fma import setup_fma_medium
-from data.gtzan import setup_gtzan
+from data.gtzan import setup_gtzan, GTZAN_GENRES
 from data.transforms import create_premaster_transforms
 from models.genremaster import create_genremaster_model
 from losses import create_loss_function
@@ -37,12 +40,24 @@ import trackio
 
 def collate_fn(batch):
     """Custom collate function for variable-length audio."""
-    min_length = min(item['waveform'].shape[1] for item in batch)
-    waveforms = torch.stack([item['waveform'][:, :min_length] for item in batch])
+    # Ensure all waveforms have the same number of channels (convert to mono if needed)
+    processed_waveforms = []
+    for item in batch:
+        waveform = item['waveform']
+        # Convert to mono if stereo
+        if waveform.shape[0] > 1:
+            waveform = waveform.mean(dim=0, keepdim=True)
+        processed_waveforms.append(waveform)
+
+    min_length = min(w.shape[1] for w in processed_waveforms)
+    waveforms = torch.stack([w[:, :min_length] for w in processed_waveforms])
     genre_indices = torch.tensor([item['genre_idx'] for item in batch])
-    
-    # Handle both FMA (track_id) and GTZAN (path) formats
-    track_ids = [item.get('track_id', item.get('path', '')) for item in batch]
+
+    # Handle both FMA (track_id) and GTZAN (file_name)
+    if 'track_id' in batch[0]:
+        track_ids = [item['track_id'] for item in batch]
+    else:
+        track_ids = [item.get('file_name', f'track_{i}') for i, item in enumerate(batch)]
 
     return {
         'waveform': waveforms,
@@ -60,22 +75,22 @@ def load_config(config_path: str) -> Dict:
 
 def create_dataloaders(config: Dict):
     """Create train and validation dataloaders."""
-    # Setup dataset based on config
-    dataset_type = config['data'].get('dataset_type', 'fma')
-    
-    if dataset_type == 'gtzan':
+    dataset_type = config['data'].get('dataset', 'fma')
+
+    if dataset_type.lower() == 'gtzan':
+        # Use GTZAN dataset
         datasets, genre_to_idx = setup_gtzan(
-            data_root=config['data']['root_dir'],
-            audio_dir=config['data']['audio_dir'],
-            num_genres=config['data']['top_k_genres'],
+            audio_dir=Path(config['data']['audio_dir']),
+            sr=config['data'].get('sample_rate', 22050),
+            duration=config['data'].get('duration', 30.0),
         )
     else:
-        # Default to FMA
+        # Use FMA dataset
         datasets, genre_to_idx = setup_fma_medium(
             data_root=Path(config['data']['root_dir']),
             audio_dir=Path(config['data']['audio_dir']),
-            top_k_genres=config['data']['top_k_genres'],
-            samples_per_genre=config['data']['samples_per_genre'],
+            top_k_genres=config['data'].get('top_k_genres', 8),
+            samples_per_genre=config['data'].get('samples_per_genre'),
         )
 
     # Limit dataset size if specified
@@ -196,18 +211,55 @@ def train_epoch(
         optimizer.zero_grad()
         output = model(pre_master_batch, genre_idx)
 
+        # Check for NaN in output - this is CRITICAL
+        if torch.isnan(output).any():
+            print(f"\n[CRITICAL] NaN in output at epoch {epoch}, batch {batch_idx}!")
+            print(f"  Input range: [{pre_master_batch.min():.4f}, {pre_master_batch.max():.4f}]")
+            # Check which layer has NaN weights
+            for name, param in model.named_parameters():
+                if torch.isnan(param).any():
+                    print(f"  NaN in param: {name}")
+                    break
+            raise RuntimeError("NaN detected - stopping training to investigate")
+
         # Compute loss
         losses = criterion(output, target_batch, return_components=True)
+
+        # Check for NaN in loss
+        if torch.isnan(losses['total']) or torch.isinf(losses['total']):
+            print(f"\n[CRITICAL] NaN/Inf loss at epoch {epoch}, batch {batch_idx}: {losses['total'].item()}")
+            raise RuntimeError("NaN loss detected - stopping training")
 
         # Backward pass
         losses['total'].backward()
 
-        # Gradient clipping
-        if config['training'].get('grad_clip'):
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(),
-                config['training']['grad_clip']
-            )
+        # Check for NaN in gradients BEFORE clipping
+        max_grad = 0.0
+        has_nan_grad = False
+        for name, param in model.named_parameters():
+            if param.grad is not None:
+                grad_max = param.grad.abs().max().item()
+                if grad_max > max_grad:
+                    max_grad = grad_max
+                if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+                    has_nan_grad = True
+                    print(f"\n[WARNING] NaN/Inf gradient in {name} at batch {batch_idx} - skipping batch")
+                    break
+
+        if has_nan_grad:
+            # Skip this batch instead of crashing - zero gradients and continue
+            optimizer.zero_grad()
+            continue
+
+        # Log max gradient occasionally
+        if batch_idx % 50 == 0:
+            print(f" [grad_max={max_grad:.2f}]", end="")
+
+        # Gradient clipping (more aggressive)
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            model.parameters(),
+            config['training'].get('grad_clip', 0.5)
+        )
 
         optimizer.step()
 
@@ -231,6 +283,7 @@ def train_epoch(
                 'train/loss_perceptual': losses['perceptual'].item(),
                 'train/lr': optimizer.param_groups[0]['lr'],
                 'epoch': epoch,
+                'step': step,
             })
 
     # Average losses
@@ -248,7 +301,6 @@ def validate_epoch(
     device: torch.device,
     transforms: tuple,
     epoch: int,
-    debug=False,
 ) -> Dict[str, float]:
     """Validate for one epoch."""
     model.eval()
@@ -257,8 +309,6 @@ def validate_epoch(
     total_loss = 0.0
     loss_components = {'loudness': 0.0, 'spectral': 0.0, 'dynamic': 0.0, 'perceptual': 0.0}
     num_batches = 0
-    batch_losses = []
-    first_batch_output = None
 
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(val_loader, desc=f"Validation")):
@@ -278,20 +328,23 @@ def validate_epoch(
 
             # Forward pass
             output = model(pre_master_batch, genre_idx)
-            
-            # Store first batch output for debugging
-            if first_batch_output is None:
-                first_batch_output = output.detach().cpu().clone()
+
+            # Debug: print shapes and ranges on first batch
+            if batch_idx == 0 and epoch == 0:
+                print(f"\n[DEBUG] Validation batch 0:")
+                print(f"  pre_master: shape={pre_master_batch.shape}, range=[{pre_master_batch.min():.4f}, {pre_master_batch.max():.4f}]")
+                print(f"  target: shape={target_batch.shape}, range=[{target_batch.min():.4f}, {target_batch.max():.4f}]")
+                print(f"  output: shape={output.shape}, range=[{output.min():.4f}, {output.max():.4f}]")
 
             # Compute loss
             losses = criterion(output, target_batch, return_components=True)
 
-            # Track per-batch loss
-            batch_loss = losses['total'].item()
-            batch_losses.append(batch_loss)
+            # Debug: print losses on first batch
+            if batch_idx == 0 and epoch == 0:
+                print(f"  losses: total={losses['total'].item():.4f}, loudness={losses['loudness'].item():.4f}, spectral={losses['spectral'].item():.4f}, dynamic={losses['dynamic'].item():.4f}, perceptual={losses['perceptual'].item():.4f}")
 
             # Accumulate
-            total_loss += batch_loss
+            total_loss += losses['total'].item()
             for key in loss_components:
                 loss_components[key] += losses[key].item()
             num_batches += 1
@@ -300,16 +353,6 @@ def validate_epoch(
     avg_loss = total_loss / num_batches
     for key in loss_components:
         loss_components[key] /= num_batches
-    
-    # Log loss variation
-    if batch_losses:
-        batch_losses_np = np.array(batch_losses)
-        loss_std = batch_losses_np.std()
-        print(f"  Val loss std dev: {loss_std:.6f}, min: {batch_losses_np.min():.6f}, max: {batch_losses_np.max():.6f}")
-        
-        # Debug output
-        if debug and first_batch_output is not None:
-            print(f"  [DEBUG] First batch output stats - mean: {first_batch_output.mean():.6f}, std: {first_batch_output.std():.6f}")
 
     return {'total': avg_loss, **loss_components}
 
@@ -426,19 +469,9 @@ def main():
     print("Starting Training")
     print("=" * 70)
 
-    # Track model weight changes
-    prev_weights = None
-
     for epoch in range(start_epoch, config['training']['num_epochs']):
         print(f"\nEpoch {epoch + 1}/{config['training']['num_epochs']}")
         epoch_start_time = time.time()
-
-        # Capture weights before training
-        current_weights = torch.cat([p.data.view(-1) for p in model.parameters()])
-        
-        if prev_weights is not None:
-            weight_change = torch.norm(current_weights - prev_weights).item()
-            print(f"  Weight change from prev epoch: {weight_change:.8f}")
 
         # Train
         train_losses = train_epoch(
@@ -447,17 +480,11 @@ def main():
         )
 
         print(f"Train loss: {train_losses['total']:.6f}")
-        
-        # Check weight change after training
-        new_weights = torch.cat([p.data.view(-1) for p in model.parameters()])
-        weight_change_during_epoch = torch.norm(new_weights - current_weights).item()
-        print(f"  Weight change during epoch: {weight_change_during_epoch:.8f}")
-        prev_weights = new_weights
 
         # Validate
         val_losses = validate_epoch(
             model, val_loader, criterion, device,
-            (train_transform, val_transform), epoch, debug=True
+            (train_transform, val_transform), epoch
         )
 
         print(f"Val loss: {val_losses['total']:.6f}")

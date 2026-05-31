@@ -1,0 +1,83 @@
+# Genre Classifier Configuration (GTZAN - 10 Genres) - ResNet Version
+
+# Data configuration
+data:
+  dataset: "gtzan"
+  audio_dir: "C:/Users/jerem/Documents/Datasets/GTZAN/genres_original"
+  root_dir: "C:/Users/jerem/Documents/Projects/GenreMaster/data"
+  sample_rate: 22050
+  duration: 30.0
+  n_genres: 10
+  train_ratio: 0.8
+  val_ratio: 0.1
+
+# Training configuration
+training:
+  batch_size: 16
+  num_epochs: 200
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-4
+
+  # Learning rate schedule
+  lr_scheduler: "cosine_warmup"
+  warmup_epochs: 10
+
+  # Augmentation
+  use_mixup: true
+  mixup_alpha: 0.4
+
+  # Label smoothing
+  label_smoothing: 0.1
+
+  # Checkpointing
+  save_every: 10
+  keep_last_n: 3
+
+  # Early stopping
+  patience: 40
+  min_delta: 1.0e-4
+
+  # Gradient clipping
+  gradient_clip: 1.0
+
+# Model configuration
+model:
+  type: "resnet"  # "cnn" or "resnet"
+  pretrained: true
+  n_genres: 10
+  n_mels: 128
+  n_fft: 2048
+  hop_length: 512
+  dropout: 0.5
+
+  # SpecAugment
+  spec_augment:
+    enabled: true
+    freq_mask_param: 27
+    time_mask_param: 100
+    n_freq_masks: 2
+    n_time_masks: 2
+
+# Optimizer configuration
+optimizer:
+  name: "adamw"
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+# Device configuration
+device:
+  type: "cuda"
+  num_workers: 4
+
+# Logging configuration
+logging:
+  use_trackio: true
+  log_every: 10
+  trackio:
+    project: "genremaster"
+    experiment: "gtzan-resnet-classifier"
+
+# Output paths
+output:
+  checkpoint_dir: "results"
+  model_name: "genre_classifier_gtzan_resnet_best.pt"
