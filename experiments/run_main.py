@@ -174,12 +174,18 @@ def train_epoch(
     total_loss = 0.0
     loss_components = {'loudness': 0.0, 'spectral': 0.0, 'dynamic': 0.0, 'perceptual': 0.0}
     num_batches = 0
+    num_skipped_batches = 0
 
     pbar = tqdm(train_loader, desc=f"Epoch {epoch}")
 
     for batch_idx, batch in enumerate(pbar):
         waveform = batch['waveform'].to(device)
         genre_idx = batch['genre_idx'].to(device)
+        
+        # Check for NaN/inf in input data
+        if torch.isnan(waveform).any() or torch.isinf(waveform).any():
+            print(f"\n[WARNING] Batch {batch_idx}: Invalid input data (NaN/inf detected)")
+            continue
 
         # Create pre-master and targets
         pre_masters = []
@@ -191,40 +197,68 @@ def train_epoch(
 
         pre_master_batch = torch.stack(pre_masters).to(device)
         target_batch = torch.stack(targets).to(device)
+        
+        # Check for NaN/inf after transform
+        if torch.isnan(pre_master_batch).any() or torch.isinf(pre_master_batch).any():
+            print(f"\n[WARNING] Batch {batch_idx}: NaN/inf in pre_master after transform")
+            continue
 
         # Forward pass
         optimizer.zero_grad()
         output = model(pre_master_batch, genre_idx)
+        
+        # Clamp output to valid audio range and check for NaN
+        output = torch.clamp(output, min=-1.0, max=1.0)
+        
+        # Check output for NaN/inf
+        if torch.isnan(output).any() or torch.isinf(output).any():
+            print(f"\n[WARNING] Batch {batch_idx}: Model output contains NaN/inf - skipping batch")
+            continue
 
         # Compute loss
         losses = criterion(output, target_batch, return_components=True)
+        
+        # Check loss for NaN/inf
+        loss_val = losses['total'].item()
+        if np.isnan(loss_val) or np.isinf(loss_val):
+            print(f"\n[ERROR] Batch {batch_idx}: Loss is NaN/inf! Loss value: {loss_val}")
+            nan_detected = True
+            break
 
         # Backward pass
         losses['total'].backward()
-
-        # Gradient clipping
-        if config['training'].get('grad_clip'):
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(),
-                config['training']['grad_clip']
-            )
-
+        
+        # Check gradient norms
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            model.parameters(),
+            config['training'].get('grad_clip', 1.0)
+        )
+        
+        grad_norm_val = grad_norm.item() if torch.is_tensor(grad_norm) else float(grad_norm)
+        if np.isnan(grad_norm_val) or np.isinf(grad_norm_val):
+            print(f"\n[WARNING] Batch {batch_idx}: NaN/inf gradient norm ({grad_norm_val}), skipping weight update")
+            optimizer.zero_grad()  # Clear the bad gradients
+            num_skipped_batches += 1
+            continue
+        elif grad_norm_val > 100.0:
+            print(f"\n[WARNING] Batch {batch_idx}: Large gradient norm: {grad_norm_val:.4f}")
+        
         optimizer.step()
 
         # Accumulate losses
-        total_loss += losses['total'].item()
+        total_loss += loss_val
         for key in loss_components:
             loss_components[key] += losses[key].item()
         num_batches += 1
 
         # Update progress bar
-        pbar.set_postfix({'loss': losses['total'].item()})
+        pbar.set_postfix({'loss': loss_val})
 
         # Log to Trackio
         if config['logging']['use_trackio'] and batch_idx % config['logging']['log_every'] == 0:
             step = epoch * len(train_loader) + batch_idx
             trackio.log({
-                'train/loss': losses['total'].item(),
+                'train/loss': loss_val,
                 'train/loss_loudness': losses['loudness'].item(),
                 'train/loss_spectral': losses['spectral'].item(),
                 'train/loss_dynamic': losses['dynamic'].item(),
@@ -232,9 +266,9 @@ def train_epoch(
                 'train/lr': optimizer.param_groups[0]['lr'],
                 'epoch': epoch,
             })
-
+    
     # Average losses
-    avg_loss = total_loss / num_batches
+    avg_loss = total_loss / num_batches if num_batches > 0 else float('nan')
     for key in loss_components:
         loss_components[key] /= num_batches
 

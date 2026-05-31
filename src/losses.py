@@ -154,9 +154,20 @@ class SpectralLoss(nn.Module):
         # Convert to dB
         pred_log_mel = self.amplitude_to_db(pred_mel)
         target_log_mel = self.amplitude_to_db(target_mel)
+        
+        # Clamp to prevent extreme values and NaN propagation
+        pred_log_mel = torch.clamp(pred_log_mel, min=-100.0, max=50.0)
+        target_log_mel = torch.clamp(target_log_mel, min=-100.0, max=50.0)
+        
+        # Replace any remaining NaN with 0
+        pred_log_mel = torch.where(torch.isnan(pred_log_mel), torch.zeros_like(pred_log_mel), pred_log_mel)
+        target_log_mel = torch.where(torch.isnan(target_log_mel), torch.zeros_like(target_log_mel), target_log_mel)
 
         # L1 distance
         loss = F.l1_loss(pred_log_mel, target_log_mel)
+        
+        # Final clamp to prevent NaN/inf from propagating
+        loss = torch.clamp(loss, min=0.0, max=100.0)
 
         return loss
 
@@ -347,15 +358,29 @@ class MultiResolutionSTFTLoss(nn.Module):
             # Magnitude
             pred_mag = pred_stft.abs()
             target_mag = target_stft.abs()
+            
+            # Clamp magnitudes to prevent numerical issues
+            pred_mag = torch.clamp(pred_mag, min=1e-7, max=100.0)
+            target_mag = torch.clamp(target_mag, min=1e-7, max=100.0)
 
             # Spectral convergence loss
-            sc_loss = torch.norm(target_mag - pred_mag, p="fro") / torch.norm(target_mag, p="fro")
+            target_norm = torch.norm(target_mag, p="fro")
+            if target_norm > 0:
+                sc_loss = torch.norm(target_mag - pred_mag, p="fro") / target_norm
+            else:
+                sc_loss = torch.tensor(0.0, device=pred.device)
+            
+            # Clamp spectral convergence loss
+            sc_loss = torch.clamp(sc_loss, min=0.0, max=100.0)
 
             # Log magnitude loss
             log_mag_loss = F.l1_loss(
                 torch.log(pred_mag + 1e-5),
                 torch.log(target_mag + 1e-5),
             )
+            
+            # Clamp log magnitude loss
+            log_mag_loss = torch.clamp(log_mag_loss, min=0.0, max=100.0)
 
             total_loss += (sc_loss + log_mag_loss)
 
