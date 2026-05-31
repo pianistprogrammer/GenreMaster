@@ -115,7 +115,13 @@ class TransformerEncoder(nn.Module):
 
         mel_spec = self.mel_transform(waveform.squeeze(1))  # [B, n_mels, T]
         log_mel = self.amplitude_to_db(mel_spec)
-        log_mel = (log_mel + 80) / 80  # Normalize
+
+        # Instance normalization: zero mean, unit variance per sample
+        # Much better than fixed offset for transformer input
+        mean = log_mel.mean(dim=(1, 2), keepdim=True)
+        std = log_mel.std(dim=(1, 2), keepdim=True).clamp(min=1e-6)
+        log_mel = (log_mel - mean) / std
+
         return log_mel
 
     def forward(self, waveform: torch.Tensor) -> torch.Tensor:
@@ -176,50 +182,65 @@ class ImprovedDSPChain(nn.Module):
     def apply_eq(
         self, x: torch.Tensor, gains_db: torch.Tensor
     ) -> torch.Tensor:
-        """Apply parametric EQ using FFT. Runs on CPU for MPS compatibility."""
-        original_device = x.device
+        """Apply parametric EQ using learnable biquad-style FIR filtering.
 
-        # Move to CPU for STFT operations (MPS has issues with STFT backward)
-        x_cpu = x.cpu()
-        gains_cpu = gains_db.cpu()
+        Uses time-domain convolution instead of STFT to maintain gradient flow
+        on MPS devices.
+        """
+        device = x.device
+        x_mono = x.squeeze(1) if x.dim() == 3 else x
 
-        n_fft = 2048
-        hop = n_fft // 4
-        window = torch.hann_window(n_fft)
+        # Build a short FIR EQ filter from the predicted gains
+        n_taps = 257  # FIR filter length (odd for symmetry)
+        half = n_taps // 2
 
-        x_mono = x_cpu.squeeze(1) if x_cpu.dim() == 3 else x_cpu
+        # Frequency axis for the FIR filter (0 to Nyquist)
+        n_freq = half + 1
+        freq_axis = torch.linspace(0, self.sr / 2, n_freq, device=device)
+        center_freqs = self.eq_center_freqs.to(device)
 
-        # STFT on CPU
-        stft = torch.stft(
-            x_mono, n_fft=n_fft, hop_length=hop,
-            window=window, return_complex=True
-        )
-
-        freqs = torch.fft.rfftfreq(n_fft, 1/self.sr)
-        center_freqs = self.eq_center_freqs.cpu()
-
-        # Build EQ curve
-        eq_curve = torch.ones(x_cpu.shape[0], len(freqs), 1)
+        # Build EQ magnitude response [batch, n_freq]
+        eq_mag = torch.ones(x_mono.shape[0], n_freq, device=device)
 
         for i, cf in enumerate(center_freqs):
-            bandwidth = cf / 2.0
-            band_response = torch.exp(-((freqs - cf) ** 2) / (2 * bandwidth ** 2))
-            gain_linear = 10 ** (gains_cpu[:, i:i+1] / 20.0)
-            eq_curve = eq_curve + (gain_linear.unsqueeze(-1) - 1) * band_response.unsqueeze(0).unsqueeze(-1)
+            bandwidth = cf / 2.0 + 1.0  # Avoid zero bandwidth
+            band_response = torch.exp(
+                -((freq_axis - cf) ** 2) / (2 * bandwidth ** 2)
+            )  # [n_freq]
+            gain_linear = 10 ** (gains_db[:, i:i+1] / 20.0)  # [batch, 1]
+            eq_mag = eq_mag + (gain_linear - 1) * band_response.unsqueeze(0)
 
-        # Apply EQ
-        stft_eq = stft * eq_curve
+        # Convert magnitude response to minimum-phase FIR via cepstral method
+        # Use symmetric (zero-phase) FIR for simplicity: IFFT of magnitude
+        # Mirror to get full spectrum, then IRFFT
+        fir = torch.fft.irfft(eq_mag, n=n_taps, dim=-1)  # [batch, n_taps]
 
-        # Inverse STFT
-        output = torch.istft(
-            stft_eq, n_fft=n_fft, hop_length=hop,
-            window=window, length=x_mono.shape[-1]
-        )
+        # Circular shift to center the filter and apply window
+        fir = torch.roll(fir, half, dims=-1)
+        window = torch.hann_window(n_taps, device=device)
+        fir = fir * window.unsqueeze(0)
+
+        # Normalize filter energy
+        fir = fir / (fir.sum(dim=-1, keepdim=True).abs().clamp(min=1e-6))
+
+        # Apply as grouped 1D convolution [batch, samples] -> [batch, 1, samples]
+        x_padded = F.pad(x_mono, (half, half), mode='reflect')
+        x_conv = x_padded.unsqueeze(1)  # [batch, 1, samples+pad]
+        fir_kernel = fir.unsqueeze(1)  # [batch, 1, n_taps]
+
+        # Per-sample convolution via groups
+        batch_size = x_mono.shape[0]
+        x_grouped = x_conv.reshape(1, batch_size, -1)  # [1, batch, samples]
+        fir_grouped = fir_kernel  # [batch, 1, n_taps]
+        output = F.conv1d(x_grouped, fir_grouped, groups=batch_size)
+        output = output.reshape(batch_size, -1)  # [batch, samples]
+
+        # Trim to original length
+        if output.shape[-1] > x_mono.shape[-1]:
+            output = output[..., :x_mono.shape[-1]]
 
         output = output.unsqueeze(1) if x.dim() == 3 else output
-
-        # Move back to original device
-        return output.to(original_device)
+        return output
 
     def soft_knee_compress(
         self,
@@ -407,8 +428,11 @@ class GenreMasterV2(nn.Module):
         )
 
         # Residual mixing weight (learnable)
+        # Initialize at -2.0 so sigmoid(-2.0) ≈ 0.12 — DSP output dominates.
+        # The model needs to learn to master (transform) the audio,
+        # so the DSP chain should drive the output from the start.
         if use_residual:
-            self.residual_weight = nn.Parameter(torch.tensor(0.1))
+            self.residual_weight = nn.Parameter(torch.tensor(-2.0))
 
         # DSP chain
         self.dsp = ImprovedDSPChain(sample_rate=sample_rate)

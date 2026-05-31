@@ -34,12 +34,15 @@ model:
 training:
   batch_size: 4
   num_epochs: 50
-  learning_rate: 5.0e-5  # Lower for transformer
+  learning_rate: 3.0e-4  # Higher LR — EQ gradients now flow properly
   weight_decay: 1.0e-4
+
+  # Gradient accumulation (effective batch = batch_size * gradient_accumulation)
+  gradient_accumulation: 8  # Effective batch size = 32
 
   # Learning rate schedule
   lr_scheduler: "cosine"
-  warmup_epochs: 5
+  warmup_epochs: 2  # Shorter warmup — don't waste epochs at near-zero LR
 
   # Gradient clipping
   grad_clip: 1.0
@@ -55,10 +58,10 @@ training:
 # Loss configuration
 loss:
   weights:
-    loudness: 1.0
-    spectral: 0.5
-    dynamic: 0.5
-    perceptual: 0.1
+    loudness: 2.0     # Primary objective — match target loudness
+    spectral: 1.0     # Important for timbral matching
+    dynamic: 0.5      # Dynamic range matching
+    perceptual: 0.3   # Perceptual quality (multi-res STFT)
 
 # Optimizer configuration
 optimizer:

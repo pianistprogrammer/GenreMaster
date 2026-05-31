@@ -282,7 +282,8 @@ class MultiResolutionSTFTLoss(nn.Module):
         else:
             target = target.squeeze(1)
 
-        # Move to CPU if needed to avoid MPS STFT backward NaN issue
+        # Move to CPU for STFT computation — MPS STFT backward produces NaN.
+        # .cpu() preserves the autograd graph so gradients flow back to MPS.
         if self.use_cpu_for_stft and pred.device.type == 'mps':
             pred = pred.cpu()
             target = target.cpu()

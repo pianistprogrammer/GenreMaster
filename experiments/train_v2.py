@@ -57,7 +57,7 @@ def collate_fn(batch):
 
 
 def train_epoch(model, loader, criterion, optimizer, device, transforms, config, epoch):
-    """Train for one epoch."""
+    """Train for one epoch with gradient accumulation."""
     model.train()
     train_tf, _ = transforms
 
@@ -66,10 +66,11 @@ def train_epoch(model, loader, criterion, optimizer, device, transforms, config,
     num_batches = 0
     skipped_batches = 0
 
+    # Gradient accumulation for effective larger batch size
+    accum_steps = config['training'].get('gradient_accumulation', 8)
+
     pbar = tqdm(loader, desc=f"Epoch {epoch}")
     for batch_idx, batch in enumerate(pbar):
-        optimizer.zero_grad()
-
         waveform = batch['waveform'].to(device)
         genre_idx = batch['genre_idx'].to(device)
 
@@ -97,7 +98,7 @@ def train_epoch(model, loader, criterion, optimizer, device, transforms, config,
             skipped_batches += 1
             continue
 
-        # Compute loss
+        # Compute loss (scaled for accumulation)
         losses = criterion(output, target_batch, return_components=True)
 
         if torch.isnan(losses['total']) or torch.isinf(losses['total']):
@@ -105,8 +106,9 @@ def train_epoch(model, loader, criterion, optimizer, device, transforms, config,
             skipped_batches += 1
             continue
 
-        # Backward
-        losses['total'].backward()
+        # Scale loss for gradient accumulation
+        scaled_loss = losses['total'] / accum_steps
+        scaled_loss.backward()
 
         # Check for NaN gradients
         has_nan = False
@@ -121,13 +123,14 @@ def train_epoch(model, loader, criterion, optimizer, device, transforms, config,
             skipped_batches += 1
             continue
 
-        # Gradient clipping
-        torch.nn.utils.clip_grad_norm_(
-            model.parameters(),
-            config['training'].get('grad_clip', 1.0)
-        )
-
-        optimizer.step()
+        # Step optimizer every accum_steps batches
+        if (batch_idx + 1) % accum_steps == 0 or (batch_idx + 1) == len(loader):
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(),
+                config['training'].get('grad_clip', 1.0)
+            )
+            optimizer.step()
+            optimizer.zero_grad()
 
         # Accumulate losses
         total_loss += losses['total'].item()
@@ -210,6 +213,10 @@ def main():
     print(f"Config: {args.config}")
     print(f"Device: {device}")
 
+    accum_steps = config['training'].get('gradient_accumulation', 1)
+    eff_batch = config['training']['batch_size'] * accum_steps
+    print(f"Batch size: {config['training']['batch_size']} x {accum_steps} accum = {eff_batch} effective")
+
     # Initialize Trackio
     if HAS_TRACKIO and config['logging'].get('use_trackio', False):
         trackio.init(
@@ -262,14 +269,14 @@ def main():
         weight_decay=config['training'].get('weight_decay', 1e-4),
     )
 
-    # Learning rate scheduler
-    total_steps = config['training']['num_epochs'] * len(train_loader)
-    warmup_steps = config['training'].get('warmup_epochs', 5) * len(train_loader)
+    # Learning rate scheduler (epoch-level stepping)
+    total_epochs = config['training']['num_epochs']
+    warmup_epochs = config['training'].get('warmup_epochs', 2)
 
-    def lr_lambda(step):
-        if step < warmup_steps:
-            return step / warmup_steps
-        progress = (step - warmup_steps) / (total_steps - warmup_steps)
+    def lr_lambda(epoch):
+        if epoch < warmup_epochs:
+            return (epoch + 1) / warmup_epochs  # +1 so epoch 0 isn't zero
+        progress = (epoch - warmup_epochs) / max(total_epochs - warmup_epochs, 1)
         return 0.5 * (1 + torch.cos(torch.tensor(progress * 3.14159)).item())
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
