@@ -1,0 +1,10 @@
+{
+  "checkpoint": "results/checkpoints_v2/best_model_v2.pt",
+  "test_samples": 100,
+  "total_loss": 0.09505725830793381,
+  "snr_db": 16.649826860427858,
+  "correlation": 0.9891916334629058,
+  "per_genre": {
+    "rock": 0.09505725830793381
+  }
+}
