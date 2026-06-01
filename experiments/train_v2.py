@@ -227,8 +227,8 @@ def main():
     # Load dataset
     print("\nLoading datasets...")
     datasets, genre_to_idx = setup_gtzan(
-        audio_dir=Path(config['data']['audio_dir']),
-        sr=config['data'].get('sample_rate', 22050),
+        audio_dir=config['data']['audio_dir'],
+        sample_rate=config['data'].get('sample_rate', 44100),
         duration=config['data'].get('duration', 30.0),
     )
 

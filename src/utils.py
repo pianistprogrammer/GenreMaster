@@ -14,10 +14,20 @@ import soundfile as sf
 def get_device() -> torch.device:
     """
     Detect and return the best available device (CUDA > MPS > CPU).
+    Tries to initialize CUDA to ensure it's available.
 
     Returns:
         torch.device: The detected device
     """
+    # Try to initialize CUDA
+    try:
+        torch.cuda.init()
+        if torch.cuda.is_available():
+            print(f"✓ CUDA available - using GPU: {torch.cuda.get_device_name(0)}")
+            return torch.device("cuda")
+    except Exception as e:
+        print(f"Note: CUDA init failed ({e}), checking availability...")
+    
     if torch.cuda.is_available():
         return torch.device("cuda")
     elif torch.backends.mps.is_available():
