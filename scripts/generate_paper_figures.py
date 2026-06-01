@@ -109,22 +109,22 @@ def plot_architecture(output_dir: Path) -> None:
                 },
             )
 
-    # Arrow from row 1 to row 2 (FiLM Conditioning → Parameter Predictor)
-    # Go down vertically, then turn and enter from the left side of Parameter Predictor
+    # Arrow from row 1 to row 2 (FiLM Conditioning -> Parameter Predictor).
+    # Route it as an elbow above the lower row so it does not cross any labels.
     film_x = x_row1[-1]
     param_x = x_row2[0]
+    elbow_y = 0.50
 
-    # Vertical segment going down
-    mid_y = (y_row1 + y_row2) / 2
-
-    ax.plot([film_x, film_x], [y_row1 - 0.10, mid_y],
+    ax.plot([film_x, film_x], [y_row1 - 0.10, elbow_y],
             color=edge_color, linewidth=4.5, transform=ax.transAxes, zorder=1)
 
-    # Horizontal segment going left to Parameter Predictor
+    ax.plot([film_x, param_x], [elbow_y, elbow_y],
+            color=edge_color, linewidth=4.5, transform=ax.transAxes, zorder=1)
+
     ax.annotate(
         "",
-        xy=(param_x - 0.11, y_row2),
-        xytext=(film_x, mid_y),
+        xy=(param_x, y_row2 + 0.11),
+        xytext=(param_x, elbow_y),
         xycoords=ax.transAxes,
         arrowprops={
             "arrowstyle": "-|>",
