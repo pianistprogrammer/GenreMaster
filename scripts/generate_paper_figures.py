@@ -23,44 +23,99 @@ def ensure_output_dir(output_dir: Path) -> None:
 
 
 def plot_architecture(output_dir: Path) -> None:
-    fig, ax = plt.subplots(figsize=(14, 4.5))
+    """Create a professional, large architecture diagram with modern design."""
+    fig, ax = plt.subplots(figsize=(16, 5.5))
     ax.axis("off")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
 
     stages = [
         "Input\nWaveform",
-        "Lightweight\nSpectral Encoder",
-        "Genre Embedding\nNetwork",
-        "FiLM-Conditioned\nParameter Predictor",
-        "Differentiable DSP\nMastering Chain",
-        "Mastered\nOutput",
+        "Spectral\nEncoder",
+        "Genre\nEmbedding",
+        "FiLM\nConditioning",
+        "Parameter\nPredictor",
+        "Differentiable\nDSP Chain",
+        "Enhanced\nOutput",
     ]
-    x_positions = np.linspace(0.08, 0.92, len(stages))
-    y = 0.5
 
-    for i, (x, text) in enumerate(zip(x_positions, stages)):
+    # Color scheme - modern and professional
+    colors = ["#e8f4f8", "#d4e6f1", "#b3d9f2", "#85c1e9", "#5dade2", "#3498db", "#2e86c1"]
+    edge_color = "#154360"
+
+    # Calculate positions with more spacing
+    n_stages = len(stages)
+    x_positions = np.linspace(0.08, 0.92, n_stages)
+    y = 0.5
+    box_width = 0.11
+    box_height = 0.35
+
+    for i, (x, text, color) in enumerate(zip(x_positions, stages, colors)):
+        # Draw larger rounded boxes
+        bbox_props = {
+            "boxstyle": "round,pad=0.7",
+            "facecolor": color,
+            "edgecolor": edge_color,
+            "linewidth": 2.5
+        }
+
         ax.text(
             x,
             y,
             text,
             ha="center",
             va="center",
-            fontsize=12,
-            bbox={"boxstyle": "round,pad=0.5", "facecolor": "#f3f6fb", "edgecolor": "#355c7d", "linewidth": 2},
+            fontsize=14,
+            fontweight="bold",
+            bbox=bbox_props,
             transform=ax.transAxes,
         )
+
+        # Draw arrows between stages
         if i < len(stages) - 1:
+            arrow_start = x + 0.062
+            arrow_end = x_positions[i + 1] - 0.062
+
             ax.annotate(
                 "",
-                xy=(x_positions[i + 1] - 0.055, y),
-                xytext=(x + 0.055, y),
+                xy=(arrow_end, y),
+                xytext=(arrow_start, y),
                 xycoords=ax.transAxes,
                 textcoords=ax.transAxes,
-                arrowprops={"arrowstyle": "->", "linewidth": 2.5, "color": "#355c7d"},
+                arrowprops={
+                    "arrowstyle": "-|>",
+                    "linewidth": 3.5,
+                    "color": edge_color,
+                    "shrinkA": 0,
+                    "shrinkB": 0
+                },
             )
 
-    ax.set_title("Genre-Conditioned Neural Audio Enhancement Pipeline", fontsize=13, fontweight='bold', pad=15)
+    # Add title with more prominence
+    ax.text(
+        0.5, 0.92,
+        "Genre-Conditioned Audio Enhancement Pipeline",
+        ha="center",
+        va="center",
+        fontsize=16,
+        fontweight="bold",
+        transform=ax.transAxes,
+    )
+
+    # Add subtitle explaining the flow
+    ax.text(
+        0.5, 0.08,
+        "Audio features are modulated by genre embeddings via FiLM conditioning to predict DSP parameters",
+        ha="center",
+        va="center",
+        fontsize=11,
+        fontstyle="italic",
+        color="#566573",
+        transform=ax.transAxes,
+    )
+
     fig.tight_layout()
-    fig.savefig(output_dir / "fig_architecture_pipeline.png", dpi=300, bbox_inches="tight")
+    fig.savefig(output_dir / "fig_architecture_pipeline.png", dpi=300, bbox_inches="tight", facecolor='white')
     plt.close(fig)
 
 
