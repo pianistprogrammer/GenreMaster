@@ -110,11 +110,28 @@ def plot_architecture(output_dir: Path) -> None:
             )
 
     # Arrow from row 1 to row 2 (FiLM Conditioning → Parameter Predictor)
-    # Clean vertical arrow with slight offset
+    # Vertical down from FiLM, then horizontal to Parameter Predictor
+    film_x = x_row1[-1]
+    param_x = x_row2[0]
+
+    # Vertical arrow down
     ax.annotate(
         "",
-        xy=(x_row2[0], y_row2 + 0.10),
-        xytext=(x_row1[-1], y_row1 - 0.10),
+        xy=(film_x, y_row2 + 0.17),
+        xytext=(film_x, y_row1 - 0.10),
+        xycoords=ax.transAxes,
+        arrowprops={
+            "arrowstyle": "-",
+            "linewidth": 4.5,
+            "color": edge_color,
+        },
+    )
+
+    # Horizontal arrow to Parameter Predictor
+    ax.annotate(
+        "",
+        xy=(param_x - 0.10, y_row2),
+        xytext=(film_x, y_row2 + 0.17),
         xycoords=ax.transAxes,
         arrowprops={
             "arrowstyle": "-|>",
