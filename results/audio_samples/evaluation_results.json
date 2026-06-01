@@ -1,0 +1,22 @@
+{
+  "test_metrics": {
+    "test_loss": 4.1545,
+    "snr_db": 7.11,
+    "correlation": 0.9416,
+    "mse": 0.004523,
+    "l1": 0.0411,
+    "rms_diff_db": -0.16
+  },
+  "per_genre": {
+    "blues": 2.6737,
+    "classical": 5.6054,
+    "country": 2.7383,
+    "disco": 3.1379,
+    "hiphop": 3.4962,
+    "jazz": 4.2908,
+    "metal": 5.4434,
+    "pop": 4.5105,
+    "reggae": 3.8492,
+    "rock": 4.6392
+  }
+}
