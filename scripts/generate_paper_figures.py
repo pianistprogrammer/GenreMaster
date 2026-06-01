@@ -163,21 +163,25 @@ def plot_classifier_comparison(output_dir: Path, cnn_history: dict, resnet_histo
     resnet_best = float(max(resnet_history["val_acc"]))
     best_epoch = resnet_history["epoch"][resnet_history["val_acc"].index(resnet_best)]
 
+    # Mark best performance with horizontal line and annotation
     ax.axhline(resnet_best, color="#1f77b4", linestyle="--", alpha=0.5, linewidth=1.0)
-    ax.scatter([best_epoch], [resnet_best], color="#2ca02c", s=60, zorder=5)
+    ax.scatter([best_epoch], [resnet_best], color="#2ca02c", s=80, zorder=5, edgecolors='black', linewidths=1.5)
+
+    # Position annotation above and to the right of the best point to avoid overlap
     ax.annotate(
-        f"Best: {resnet_best:.2f}% at epoch {best_epoch}",
+        f"Best: {resnet_best:.2f}% @ epoch {best_epoch}",
         xy=(best_epoch, resnet_best),
-        xytext=(best_epoch + 2, resnet_best - 5),
+        xytext=(best_epoch + 8, resnet_best + 3),
         fontsize=10,
-        arrowprops={"arrowstyle": "->", "linewidth": 1.0},
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="gray", alpha=0.9),
+        arrowprops={"arrowstyle": "->", "linewidth": 1.5, "color": "black"},
     )
 
     ax.set_xlabel("Epoch", fontsize=11)
     ax.set_ylabel("Validation accuracy (%)", fontsize=11)
     ax.set_title("ResNet Genre Classifier Validation Accuracy (GTZAN)", fontsize=12)
     ax.grid(alpha=0.25)
-    ax.legend(fontsize=10)
+    ax.legend(fontsize=10, loc='lower right')
     fig.tight_layout()
     fig.savefig(output_dir / "fig_classifier_val_accuracy.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
