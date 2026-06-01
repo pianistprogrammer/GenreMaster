@@ -222,14 +222,14 @@ Fig.~\ref{fig:v1v2comp} shows a side-by-side comparison of model size and conver
 The V2 Transformer model converged significantly faster (17 epochs vs 36) and achieved a 30$\times$ lower validation loss (0.0913 vs 2.7573). Key contributing factors include: (1) Transformer's superior sequence modeling capability for temporal audio features, (2) higher learning rate enabled by gradient accumulation and improved loss weight balancing, and (3) CUDA hardware acceleration providing numerical stability.
 
 \subsection{Auxiliary Genre Classifier Results}
-Because genre conditioning quality depends on genre separability, the repository also includes standalone genre classifier training logs. The ResNet classifier achieved 88.89\% best validation accuracy versus 73.74\% for the CNN baseline (+15.15 percentage points).
+Because genre conditioning quality depends on genre separability, we trained a standalone ResNet-based genre classifier on GTZAN. The ResNet classifier achieved 88.89\% best validation accuracy, demonstrating strong genre discrimination capability that supports the framework's genre-conditioned architecture.
 
-Fig.~\ref{fig:clf} shows validation trajectories from the saved histories.
+Fig.~\ref{fig:clf} shows the validation accuracy trajectory.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.95\linewidth]{figures/fig_classifier_val_accuracy.png}
-\caption{Validation accuracy trajectories for CNN and ResNet genre classifiers on GTZAN.}
+\caption{ResNet genre classifier validation accuracy on GTZAN, achieving 88.89\% best performance.}
 \label{fig:clf}
 \end{figure}
 
