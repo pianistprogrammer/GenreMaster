@@ -23,8 +23,8 @@ def ensure_output_dir(output_dir: Path) -> None:
 
 
 def plot_architecture(output_dir: Path) -> None:
-    """Create a professional architecture diagram with large white boxes and big fonts."""
-    fig, ax = plt.subplots(figsize=(18, 6.5))
+    """Create architecture diagram with tall boxes that have room to breathe."""
+    fig, ax = plt.subplots(figsize=(18, 7))
     ax.axis("off")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -39,21 +39,21 @@ def plot_architecture(output_dir: Path) -> None:
         "Enhanced\nOutput",
     ]
 
-    # All white boxes with dark border
+    # Dark border color for contrast
     edge_color = "#2c3e50"
 
-    # Calculate positions with more spacing
+    # Calculate positions
     n_stages = len(stages)
     x_positions = np.linspace(0.08, 0.92, n_stages)
-    y = 0.5
+    y = 0.50  # Center vertically
 
     for i, (x, text) in enumerate(zip(x_positions, stages)):
-        # Draw large white boxes with substantial padding
+        # Create tall boxes with lots of internal space and bigger font
         bbox_props = {
-            "boxstyle": "round,pad=0.9",  # Much more padding for taller boxes
+            "boxstyle": "round,pad=1.2",  # Much more padding for truly tall boxes
             "facecolor": "white",
             "edgecolor": edge_color,
-            "linewidth": 2.8
+            "linewidth": 3.0
         }
 
         ax.text(
@@ -62,16 +62,17 @@ def plot_architecture(output_dir: Path) -> None:
             text,
             ha="center",
             va="center",
-            fontsize=16,  # Bigger font
+            fontsize=18,  # Even bigger font
             fontweight="bold",
+            linespacing=1.8,  # More space between lines for breathing room
             bbox=bbox_props,
             transform=ax.transAxes,
         )
 
         # Draw arrows between stages
         if i < len(stages) - 1:
-            arrow_start = x + 0.065
-            arrow_end = x_positions[i + 1] - 0.065
+            arrow_start = x + 0.068
+            arrow_end = x_positions[i + 1] - 0.068
 
             ax.annotate(
                 "",
@@ -81,27 +82,27 @@ def plot_architecture(output_dir: Path) -> None:
                 textcoords=ax.transAxes,
                 arrowprops={
                     "arrowstyle": "-|>",
-                    "linewidth": 3.5,
+                    "linewidth": 4.0,
                     "color": edge_color,
                     "shrinkA": 0,
                     "shrinkB": 0
                 },
             )
 
-    # Add title with more prominence
+    # Add title
     ax.text(
-        0.5, 0.88,
+        0.5, 0.90,
         "Genre-Conditioned Audio Enhancement Pipeline",
         ha="center",
         va="center",
-        fontsize=17,
+        fontsize=18,
         fontweight="bold",
         transform=ax.transAxes,
     )
 
-    # Add subtitle explaining the flow
+    # Add subtitle
     ax.text(
-        0.5, 0.10,
+        0.5, 0.08,
         "Audio features are modulated by genre embeddings via FiLM conditioning to predict DSP parameters",
         ha="center",
         va="center",
