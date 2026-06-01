@@ -225,8 +225,8 @@ def main():
     seed_everything(42)
 
     # Paths
-    data_root = Path("/Users/I558118/Documents/Projects/GenreMaster/data")
-    audio_dir = Path("/Volumes/LLModels/Datasets/fma_medium")
+    data_root = Path("C:/Users/jerem/Documents/Projects/GenreMaster/data")
+    audio_dir = Path("C:/Users/jerem/Documents/Datasets/fma_medium")
     output_dir = data_root / "processed"
 
     # Load FMA metadata

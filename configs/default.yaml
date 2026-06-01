@@ -9,8 +9,8 @@ experiment:
 # Dataset configuration
 data:
   dataset: "gtzan"  # Use GTZAN instead of FMA
-  root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
-  audio_dir: "/Volumes/LLModels/Datasets/gtzan"
+  root_dir: "C:/Users/jerem/Documents/Projects/GenreMaster/data"
+  audio_dir: "C:/Users/jerem/Documents/Datasets/GTZAN/genres_original"
   sample_rate: 22050  # GTZAN native sample rate
   duration: 30.0  # seconds
   n_genres: 10
@@ -65,8 +65,8 @@ optimizer:
 
 # Device configuration
 device:
-  type: "auto"
-  num_workers: 0
+  type: "cuda"
+  num_workers: 4
 
 # Logging configuration
 logging:
