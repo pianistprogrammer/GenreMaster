@@ -39,11 +39,11 @@ We propose a genre-conditioned neural audio enhancement framework that learns st
 The central research question is: can a neural framework learn genre-dependent audio enhancement transformations that generalize across musical styles, and how do different encoder architectures impact learning dynamics and convergence? We compare two architectural variants: V1 (CNN encoder, 2.51M parameters) and V2 (Transformer encoder, 4.17M parameters), documenting the impact of encoder architecture and training configuration on enhancement performance through controlled experiments on the GTZAN dataset.
 
 \section{Related Work}
-Genre-aware audio modeling intersects music information retrieval, conditional representation learning, and differentiable signal processing. GTZAN remains a widely used benchmark for genre-conditioned audio tasks \cite{ref_gtzan}. Deep residual encoders for spectrogram-based audio analysis are standard due to strong representation capacity \cite{ref_resnet}.
+Genre-aware audio modeling intersects music information retrieval, conditional representation learning, and differentiable signal processing. GTZAN remains a widely used benchmark for genre-conditioned audio tasks \cite{tzanetakis2002musical}. Deep residual encoders for spectrogram-based audio analysis are standard due to strong representation capacity \cite{he2016deep}.
 
-Neural audio enhancement has traditionally focused on source separation, denoising, and bandwidth extension. Recent work has explored learned transformations for production-oriented tasks, though most systems operate genre-agnostically. Conditioning mechanisms such as FiLM provide a principled approach to inject control variables into neural feature processing \cite{ref_film}, enabling style-dependent transformations.
+Neural audio enhancement has traditionally focused on source separation, denoising, and bandwidth extension \cite{defossez2021real}. Recent work has explored learned transformations for production-oriented tasks \cite{steinmetz2021automatic,colonartificial}, though most systems operate genre-agnostically. Conditioning mechanisms such as FiLM provide a principled approach to inject control variables into neural feature processing \cite{perez2018film}, enabling style-dependent transformations.
 
-Differentiable DSP has enabled end-to-end optimization of audio effect chains by propagating gradients through parametric processors \cite{ref_dasp}. This paradigm allows neural networks to learn effect parameters rather than directly synthesizing waveforms, providing interpretability and physical grounding. Perceptual training objectives based on multi-resolution STFT terms are common in high-fidelity audio generation pipelines \cite{ref_pwg}.
+Differentiable DSP has enabled end-to-end optimization of audio effect chains by propagating gradients through parametric processors \cite{engel2020ddsp,steinmetz2020auraloss,ramirez2021differentiable}. This paradigm allows neural networks to learn effect parameters rather than directly synthesizing waveforms, providing interpretability and physical grounding. Perceptual training objectives based on multi-resolution STFT terms are common in high-fidelity audio generation pipelines \cite{yamamoto2020parallel}.
 
 Our work integrates these components into a unified framework where genre conditioning modulates learned audio transformations through differentiable DSP, explicitly modeling style-dependent spectral and dynamic processing inspired by production practices. All reported outcomes are tied to reproducible experiments.
 
@@ -62,7 +62,7 @@ We implement two architectural variants sharing the same genre conditioning and 
 
 \textbf{V1 (CNN-based):} Uses a 4-layer lightweight convolutional encoder processing log-mel spectrograms, producing 512-dimensional audio features. Genre labels are embedded into a 128-dimensional continuous latent space through a learned embedding layer.
 
-\textbf{V2 (Transformer-based):} Replaces the CNN with a 4-layer Transformer encoder (8 attention heads, $d_{\text{model}}=256$) to model long-range temporal dependencies in spectral features.
+\textbf{V2 (Transformer-based):} Replaces the CNN with a 4-layer Transformer encoder \cite{vaswani2017attention} (8 attention heads, $d_{\text{model}}=256$) to model long-range temporal dependencies in spectral features.
 
 Both variants use FiLM conditioning to modulate a shared parameter predictor network. The predictor outputs parameters for a differentiable DSP chain:
 \begin{itemize}
@@ -73,7 +73,7 @@ Both variants use FiLM conditioning to modulate a shared parameter predictor net
 \item Stereo width control.
 \end{itemize}
 
-FiLM modulation follows \cite{ref_film}:
+FiLM modulation follows \cite{perez2018film}:
 \begin{equation}
 \mathrm{FiLM}(h, z_g)=\gamma(z_g)\odot h+\beta(z_g),
 \end{equation}
@@ -128,7 +128,7 @@ Clip duration & 30.0 s & 30.0 s \\
 Batch size & 4 & 8 \\
 Gradient accum. & -- & 4 (effective: 32) \\
 Epochs & 50 & 32 (early stop) \\
-Optimizer & Adam & AdamW \\
+Optimizer & Adam \cite{kingma2014adam} & AdamW \cite{loshchilov2017adamw} \\
 Learning rate & $1\times10^{-5}$ & $3\times10^{-4}$ \\
 Weight decay & $1\times10^{-5}$ & $1\times10^{-4}$ \\
 Scheduler & Cosine (5 warmup) & Cosine (2 warmup) \\
@@ -256,13 +256,7 @@ Key findings include: (1) self-attention mechanisms effectively model long-range
 \section*{Ethics and Reproducibility Statement}
 All experiments used publicly available music datasets and code-executed metrics from saved logs. No human subject data were collected. Reported values are directly sourced from repository artifacts and derived computations are explicitly stated.
 
-\begin{thebibliography}{00}
-\bibitem{ref_gtzan} G. Tzanetakis and P. Cook, ``Musical genre classification of audio signals,'' \emph{IEEE Transactions on Speech and Audio Processing}, vol. 10, no. 5, pp. 293--302, 2002.
-\bibitem{ref_resnet} K. He, X. Zhang, S. Ren, and J. Sun, ``Deep residual learning for image recognition,'' in \emph{Proc. CVPR}, 2016, pp. 770--778.
-\bibitem{ref_film} E. Perez, F. Strub, H. de Vries, V. Dumoulin, and A. Courville, ``FiLM: Visual reasoning with a general conditioning layer,'' in \emph{Proc. AAAI}, 2018, pp. 3942--3951.
-\bibitem{ref_dasp} C. J. Steinmetz and J. D. Reiss, ``Auraloss: Audio-focused loss functions in PyTorch,'' in \emph{Proc. Digital Music Research Network One-day Workshop}, 2020.
-\bibitem{ref_pwg} R. Yamamoto, E. Song, and J.-M. Kim, ``Parallel WaveGAN: A fast waveform generation model based on generative adversarial networks with multi-resolution spectrogram,'' in \emph{Proc. ICASSP}, 2020, pp. 6199--6203.
-\bibitem{ref_itu} ITU-R BS.1770-4, ``Algorithms to measure audio programme loudness and true-peak audio level,'' International Telecommunication Union, 2015.
-\end{thebibliography}
+\bibliographystyle{IEEEtran}
+\bibliography{references}
 
 \end{document}
