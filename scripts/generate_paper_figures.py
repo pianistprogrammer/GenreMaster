@@ -23,7 +23,7 @@ def ensure_output_dir(output_dir: Path) -> None:
 
 
 def plot_architecture(output_dir: Path) -> None:
-    fig, ax = plt.subplots(figsize=(12, 3.8))
+    fig, ax = plt.subplots(figsize=(14, 4.5))
     ax.axis("off")
 
     stages = [
@@ -44,21 +44,21 @@ def plot_architecture(output_dir: Path) -> None:
             text,
             ha="center",
             va="center",
-            fontsize=11,
-            bbox={"boxstyle": "round,pad=0.35", "facecolor": "#f3f6fb", "edgecolor": "#355c7d"},
+            fontsize=12,
+            bbox={"boxstyle": "round,pad=0.5", "facecolor": "#f3f6fb", "edgecolor": "#355c7d", "linewidth": 2},
             transform=ax.transAxes,
         )
         if i < len(stages) - 1:
             ax.annotate(
                 "",
-                xy=(x_positions[i + 1] - 0.06, y),
-                xytext=(x + 0.06, y),
+                xy=(x_positions[i + 1] - 0.055, y),
+                xytext=(x + 0.055, y),
                 xycoords=ax.transAxes,
                 textcoords=ax.transAxes,
-                arrowprops={"arrowstyle": "->", "linewidth": 1.5, "color": "#355c7d"},
+                arrowprops={"arrowstyle": "->", "linewidth": 2.5, "color": "#355c7d"},
             )
 
-    ax.set_title("GenreMaster V1 Inference Pipeline (from implemented model modules)", fontsize=12)
+    ax.set_title("Genre-Conditioned Neural Audio Enhancement Pipeline", fontsize=13, fontweight='bold', pad=15)
     fig.tight_layout()
     fig.savefig(output_dir / "fig_architecture_pipeline.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
