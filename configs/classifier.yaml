@@ -3,7 +3,7 @@
 # Data configuration
 data:
   audio_dir: "C:/Users/jerem/Documents/Projects/Datasets/fma_small"
-  root_dir: "C:/Users/jerem/Documents/Projects/GenreMaster/data"
+  root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
   sample_rate: 44100
   duration: 30.0
   top_k_genres: 8  # FMA Small has 8 balanced genres
@@ -38,8 +38,8 @@ optimizer:
 
 # Device configuration
 device:
-  type: "cuda"
-  num_workers: 4
+  type: "auto"
+  num_workers: 0
 
 # Output paths
 output:

@@ -9,8 +9,8 @@ experiment:
 # Dataset configuration
 data:
   dataset: "gtzan"
-  root_dir: "C:/Users/jerem/Documents/Projects/GenreMaster/data"
-  audio_dir: "C:/Users/jerem/Documents/Datasets/GTZAN/genres_original"
+  root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
+  audio_dir: "/Volumes/LLModels/Datasets/gtzan"
   sample_rate: 22050
   duration: 30.0
   n_genres: 10
@@ -32,13 +32,13 @@ model:
 
 # Training configuration
 training:
-  batch_size: 8
+  batch_size: 4
   num_epochs: 50
   learning_rate: 3.0e-4  # Higher LR — EQ gradients now flow properly
   weight_decay: 1.0e-4
 
   # Gradient accumulation (effective batch = batch_size * gradient_accumulation)
-  gradient_accumulation: 4  # Effective batch size = 32
+  gradient_accumulation: 8  # Effective batch size = 32
 
   # Learning rate schedule
   lr_scheduler: "cosine"
@@ -71,8 +71,8 @@ optimizer:
 
 # Device configuration
 device:
-  type: "cuda"
-  num_workers: 4
+  type: "auto"
+  num_workers: 0
 
 # Logging configuration
 logging:
