@@ -23,91 +23,121 @@ def ensure_output_dir(output_dir: Path) -> None:
 
 
 def plot_architecture(output_dir: Path) -> None:
-    """Create architecture diagram with tall boxes that have room to breathe."""
-    fig, ax = plt.subplots(figsize=(18, 7))
+    """Create two-row architecture diagram with large boxes and clear flow."""
+    fig, ax = plt.subplots(figsize=(16, 8))
     ax.axis("off")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
 
-    stages = [
-        "Input\nWaveform",
-        "Spectral\nEncoder",
-        "Genre\nEmbedding",
-        "FiLM\nConditioning",
-        "Parameter\nPredictor",
-        "Differentiable\nDSP Chain",
-        "Enhanced\nOutput",
-    ]
+    # Split into two rows for bigger boxes
+    row1_stages = ["Input\nWaveform", "Spectral\nEncoder", "Genre\nEmbedding", "FiLM\nConditioning"]
+    row2_stages = ["Parameter\nPredictor", "Differentiable\nDSP Chain", "Enhanced\nOutput"]
 
-    # Dark border color for contrast
     edge_color = "#2c3e50"
 
-    # Calculate positions
-    n_stages = len(stages)
-    x_positions = np.linspace(0.08, 0.92, n_stages)
-    y = 0.50  # Center vertically
+    # Row 1 - top row
+    n_row1 = len(row1_stages)
+    x_row1 = np.linspace(0.12, 0.88, n_row1)
+    y_row1 = 0.65
 
-    for i, (x, text) in enumerate(zip(x_positions, stages)):
-        # Create tall boxes with lots of internal space and bigger font
+    # Row 2 - bottom row
+    n_row2 = len(row2_stages)
+    x_row2 = np.linspace(0.25, 0.75, n_row2)
+    y_row2 = 0.35
+
+    # Draw row 1 boxes
+    for i, (x, text) in enumerate(zip(x_row1, row1_stages)):
         bbox_props = {
-            "boxstyle": "round,pad=1.2",  # Much more padding for truly tall boxes
+            "boxstyle": "round,pad=1.3",
             "facecolor": "white",
             "edgecolor": edge_color,
-            "linewidth": 3.0
+            "linewidth": 3.2
         }
 
         ax.text(
-            x,
-            y,
-            text,
-            ha="center",
-            va="center",
-            fontsize=18,  # Even bigger font
-            fontweight="bold",
-            linespacing=1.8,  # More space between lines for breathing room
+            x, y_row1, text,
+            ha="center", va="center",
+            fontsize=19, fontweight="bold",
+            linespacing=1.9,
             bbox=bbox_props,
             transform=ax.transAxes,
         )
 
-        # Draw arrows between stages
-        if i < len(stages) - 1:
-            arrow_start = x + 0.068
-            arrow_end = x_positions[i + 1] - 0.068
-
+        # Arrows within row 1
+        if i < len(row1_stages) - 1:
             ax.annotate(
                 "",
-                xy=(arrow_end, y),
-                xytext=(arrow_start, y),
+                xy=(x_row1[i + 1] - 0.08, y_row1),
+                xytext=(x + 0.08, y_row1),
                 xycoords=ax.transAxes,
-                textcoords=ax.transAxes,
                 arrowprops={
                     "arrowstyle": "-|>",
-                    "linewidth": 4.0,
+                    "linewidth": 4.5,
                     "color": edge_color,
-                    "shrinkA": 0,
-                    "shrinkB": 0
                 },
             )
 
+    # Draw row 2 boxes
+    for i, (x, text) in enumerate(zip(x_row2, row2_stages)):
+        bbox_props = {
+            "boxstyle": "round,pad=1.3",
+            "facecolor": "white",
+            "edgecolor": edge_color,
+            "linewidth": 3.2
+        }
+
+        ax.text(
+            x, y_row2, text,
+            ha="center", va="center",
+            fontsize=19, fontweight="bold",
+            linespacing=1.9,
+            bbox=bbox_props,
+            transform=ax.transAxes,
+        )
+
+        # Arrows within row 2
+        if i < len(row2_stages) - 1:
+            ax.annotate(
+                "",
+                xy=(x_row2[i + 1] - 0.10, y_row2),
+                xytext=(x + 0.10, y_row2),
+                xycoords=ax.transAxes,
+                arrowprops={
+                    "arrowstyle": "-|>",
+                    "linewidth": 4.5,
+                    "color": edge_color,
+                },
+            )
+
+    # Arrow from row 1 to row 2 (FiLM Conditioning → Parameter Predictor)
+    # Clean vertical arrow with slight offset
+    ax.annotate(
+        "",
+        xy=(x_row2[0], y_row2 + 0.10),
+        xytext=(x_row1[-1], y_row1 - 0.10),
+        xycoords=ax.transAxes,
+        arrowprops={
+            "arrowstyle": "-|>",
+            "linewidth": 4.5,
+            "color": edge_color,
+        },
+    )
+
     # Add title
     ax.text(
-        0.5, 0.90,
+        0.5, 0.92,
         "Genre-Conditioned Audio Enhancement Pipeline",
-        ha="center",
-        va="center",
-        fontsize=18,
-        fontweight="bold",
+        ha="center", va="center",
+        fontsize=20, fontweight="bold",
         transform=ax.transAxes,
     )
 
     # Add subtitle
     ax.text(
-        0.5, 0.08,
-        "Audio features are modulated by genre embeddings via FiLM conditioning to predict DSP parameters",
-        ha="center",
-        va="center",
-        fontsize=12,
-        fontstyle="italic",
+        0.5, 0.06,
+        "Two-stage architecture: genre-conditioned feature extraction (top) and DSP parameter prediction (bottom)",
+        ha="center", va="center",
+        fontsize=13, fontstyle="italic",
         color="#566573",
         transform=ax.transAxes,
     )
