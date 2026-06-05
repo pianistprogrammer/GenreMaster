@@ -21,20 +21,15 @@
 \providecommand{\BIBdecl}{\relax}
 \BIBdecl
 
-\bibitem{tzanetakis2002musical}
-G.~Tzanetakis and P.~Cook, ``Musical genre classification of audio signals,''
-  \emph{IEEE Transactions on Speech and Audio Processing}, vol.~10, no.~5, pp.
-  293--302, 2002.
-
-\bibitem{he2016deep}
-K.~He, X.~Zhang, S.~Ren, and J.~Sun, ``Deep residual learning for image
-  recognition,'' in \emph{Proceedings of the IEEE Conference on Computer Vision
-  and Pattern Recognition (CVPR)}, 2016, pp. 770--778.
-
 \bibitem{defossez2021real}
 A.~Defossez, G.~Synnaeve, and Y.~Adi, ``Real time speech enhancement in the
   waveform domain,'' in \emph{Proceedings of Interspeech}, 2020, pp.
   3291--3295.
+
+\bibitem{mack2020deep}
+A.~M{\"a}kitalo, S.~Disch, and V.~Pulkki, ``Deep learning for black-box
+  modeling of audio effects,'' in \emph{Applied Sciences}, vol.~10, no.~2,
+  2020, p. 638.
 
 \bibitem{steinmetz2021automatic}
 C.~J. Steinmetz, J.~Pons, S.~Pascual, and J.~Serra, ``Automatic multitrack
@@ -47,6 +42,22 @@ G.~P. Col{\'o}n and G.~De~Poli, ``Artificial intelligence for music
   production,'' \emph{IEEE Signal Processing Magazine}, vol.~38, no.~4, pp.
   41--55, 2021.
 
+\bibitem{tzanetakis2002musical}
+G.~Tzanetakis and P.~Cook, ``Musical genre classification of audio signals,''
+  \emph{IEEE Transactions on Speech and Audio Processing}, vol.~10, no.~5, pp.
+  293--302, 2002.
+
+\bibitem{he2016deep}
+K.~He, X.~Zhang, S.~Ren, and J.~Sun, ``Deep residual learning for image
+  recognition,'' in \emph{Proceedings of the IEEE Conference on Computer Vision
+  and Pattern Recognition (CVPR)}, 2016, pp. 770--778.
+
+\bibitem{gururani2019instrument}
+S.~Gururani and A.~Lerch, ``Instrument identification in polyphonic music using
+  convolutional neural networks,'' in \emph{Proceedings of the International
+  Society for Music Information Retrieval Conference (ISMIR)}, 2019, pp.
+  307--314.
+
 \bibitem{perez2018film}
 E.~Perez, F.~Strub, H.~De~Vries, V.~Dumoulin, and A.~Courville, ``Film: Visual
   reasoning with a general conditioning layer,'' in \emph{Proceedings of the
@@ -58,16 +69,16 @@ J.~Engel, L.~Hantrakul, C.~Gu, and A.~Roberts, ``Ddsp: Differentiable digital
   signal processing,'' in \emph{International Conference on Learning
   Representations (ICLR)}, 2020.
 
-\bibitem{steinmetz2020auraloss}
-C.~J. Steinmetz and J.~D. Reiss, ``auraloss: Audio focused loss functions in
-  pytorch,'' in \emph{Digital Music Research Network One-day Workshop
-  (DMRN+15)}, 2020.
-
 \bibitem{ramirez2021differentiable}
 M.~A.~M. Ram{\'\i}rez and J.~D. Reiss, ``Differentiable signal processing with
   black-box audio effects,'' in \emph{Proceedings of the IEEE International
   Conference on Acoustics, Speech and Signal Processing (ICASSP)}, 2021, pp.
   171--175.
+
+\bibitem{steinmetz2020auraloss}
+C.~J. Steinmetz and J.~D. Reiss, ``auraloss: Audio focused loss functions in
+  pytorch,'' in \emph{Digital Music Research Network One-day Workshop
+  (DMRN+15)}, 2020.
 
 \bibitem{yamamoto2020parallel}
 R.~Yamamoto, E.~Song, and J.-M. Kim, ``Parallel wavegan: A fast waveform
@@ -84,5 +95,20 @@ A.~Vaswani, N.~Shazeer, N.~Parmar, J.~Uszkoreit, L.~Jones, A.~N. Gomez,
 \bibitem{loshchilov2017adamw}
 I.~Loshchilov and F.~Hutter, ``Decoupled weight decay regularization,'' in
   \emph{International Conference on Learning Representations (ICLR)}, 2019.
+
+\bibitem{itu2015loudness}
+{ITU-R}, ``Algorithms to measure audio programme loudness and true-peak audio
+  level,'' International Telecommunication Union, Tech. Rep. BS.1770-4, 2015.
+
+\bibitem{kilgour2018fr}
+K.~Kilgour, M.~Zuluaga, D.~Roblek, and M.~Sharifi, ``Fr{\'e}chet audio
+  distance: A reference-free metric for evaluating music enhancement
+  algorithms,'' in \emph{Proceedings of Interspeech}, 2019.
+
+\bibitem{manocha2021cdpam}
+P.~Manocha, A.~Finkelstein, R.~Zhang, N.~J. Bryan, G.~J. Mysore, and Z.~Jin,
+  ``Cdpam: Contrastive learning for perceptual audio similarity,'' in
+  \emph{Proceedings of the IEEE International Conference on Acoustics, Speech
+  and Signal Processing (ICASSP)}, 2021, pp. 196--200.
 
 \end{thebibliography}
