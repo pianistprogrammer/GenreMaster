@@ -175,7 +175,6 @@ Device backend & CUDA \\
 \end{table}
 
 \section{Results}
-\subsection{Training Behavior}
 Fig.~\ref{fig:trainloss} shows the training and validation trajectories. The model converges rapidly and maintains a small gap between training and validation loss. This behavior suggests that the architecture is able to learn the controlled degradation-reversal task without severe overfitting.
 
 \begin{figure}[htbp]
@@ -216,7 +215,6 @@ Fig.~\ref{fig:genreloss} reports test loss by genre. The losses remain within a 
 \label{fig:genreloss}
 \end{figure}
 
-\subsection{Auxiliary Genre Separability}
 To verify that the dataset supports meaningful genre-conditioned modeling, we first trained a separate ResNet-based genre classifier on the same corpus. The classifier reached high validation accuracy, as shown in Fig.~\ref{fig:clf}, indicating that the genre labels are learnable from the spectral representation. This auxiliary result motivated the subsequent mastering experiment, in which genre labels were used as the conditioning signal for the Transformer-based model. At the same time, GTZAN genre labels remain coarse and should not be treated as complete style descriptors.
 
 \begin{figure}[htbp]
@@ -243,14 +241,16 @@ The present study suggests three requirements for moving from proof-of-concept e
 Under these conditions, the GenreMaster architecture could serve as a foundation for a more realistic system: the Transformer encoder would model musical context, the conditioning pathway would represent target style, and the differentiable DSP chain would provide controllable, interpretable rendering.
 
 \section{Conclusion}
-This paper presented GenreMaster, a genre-conditioned audio enhancement framework that combines Transformer spectral encoding, FiLM conditioning, learned genre embeddings, and differentiable DSP. The model predicts interpretable parameters for a mastering-inspired processing chain rather than generating audio directly.
+This paper presented GenreMaster, a genre-conditioned audio enhancement framework that combines Transformer spectral encoding, learned genre embeddings, conditioning mechanisms, and differentiable DSP within a mastering-inspired parameter-prediction pipeline. The central idea is to treat automatic mastering not as unconstrained waveform generation, but as structured control of interpretable audio-processing operations. This design keeps the learned transformation connected to established mastering practice while still enabling end-to-end optimization.
 
-In a controlled GTZAN proof-of-concept experiment, GenreMaster learned stable degradation-reversal transformations and generalized consistently across held-out clips and genre categories. These findings support the feasibility of genre-conditioned differentiable DSP for music enhancement.
+Within the controlled GTZAN proof-of-concept setting, the study showed three main results. First, genre labels provided a usable conditioning signal, supported by the auxiliary genre-classification experiment and by the stable behavior of the enhancement model across the evaluated categories. Second, the Transformer-based mastering model learned the degradation-reversal task with a small validation-test gap, indicating that the architecture can generalize beyond the training split under the adopted protocol. Third, the differentiable DSP formulation made it possible to combine neural representation learning with a parameterized signal-processing chain, offering a more interpretable alternative to direct black-box audio generation.
 
-At the same time, the study is intentionally bounded. The experiment does not establish production-ready automatic mastering because it relies on synthetic degradation and finished music rather than true unmastered/mastered pairs. Future work should focus on real mastering datasets, perceptual evaluation, richer style conditioning, and comparisons with professional and commercial mastering systems.
+These findings are encouraging, but they should be interpreted with appropriate restraint. The present experiment demonstrates technical feasibility under synthetic supervision; it does not establish professional-quality automatic mastering. Because GTZAN contains finished music rather than genuine unmastered/mastered pairs, the task remains a controlled reconstruction problem rather than a full mastering benchmark. In addition, the reported metrics capture reconstruction fidelity more directly than perceptual preference, which limits the strength of any claims about listener-facing quality.
 
-\section*{Ethics and Reproducibility Statement}
-All experiments used publicly available music data and code-executed metrics from repository artifacts. No human subject data were collected. The reported values are derived from saved experimental outputs, and the limitations of the proof-of-concept evaluation are stated explicitly.
+The main contribution of this work is therefore methodological. GenreMaster provides a concrete experimental framework for studying how style information, neural sequence modeling, and differentiable audio processing can be combined in a mastering-oriented setting. Future work should extend this foundation with real mastering datasets, richer style representations beyond coarse genre labels, perceptual and engineer-in-the-loop evaluation, and stronger comparisons against commercial and professional baselines. Under those conditions, the proposed framework could evolve from a proof-of-concept enhancement system into a more realistic approach to genre-aware automatic mastering.
+
+% \section*{Ethics and Reproducibility Statement}
+% All experiments used publicly available music data and code-executed metrics from repository artifacts. No human subject data were collected. The reported values are derived from saved experimental outputs, and the limitations of the proof-of-concept evaluation are stated explicitly.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
