@@ -2,7 +2,7 @@ PWD /Users/I558118/Documents/Projects/GenreMaster/IEEE_PAPER
 INPUT /usr/local/texlive/2026/texmf.cnf
 INPUT /usr/local/texlive/2026/texmf-dist/web2c/texmf.cnf
 INPUT /usr/local/texlive/2026/texmf-var/web2c/pdftex/pdflatex.fmt
-INPUT /Users/I558118/Documents/Projects/GenreMaster/IEEE_PAPER/genremaster_ieee_draft.tex
+INPUT genremaster_ieee_draft.tex
 OUTPUT genremaster_ieee_draft.log
 INPUT ./IEEEtran.cls
 INPUT IEEEtran.cls
