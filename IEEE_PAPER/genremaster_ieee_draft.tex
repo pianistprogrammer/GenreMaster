@@ -75,6 +75,12 @@ In GenreMaster, this transformation is decomposed into audio encoding, genre con
 \end{equation}
 where $E_\theta$ is the audio encoder, $z_g$ is the learned genre embedding, $P_\theta$ is the FiLM-conditioned parameter predictor, and $D_\phi$ is the differentiable DSP chain.
 
+The parameter vector is structured around the mastering controls predicted by the model:
+\begin{equation}
+\phi = [\phi_{\mathrm{lufs}},\, \phi_{\mathrm{eq}},\, \phi_{\mathrm{comp}},\, \phi_{\mathrm{lim}},\, \phi_{\mathrm{width}}],
+\end{equation}
+where the terms denote target loudness, equalization, multiband compression, limiter threshold, and stereo-width control, respectively.
+
 This formulation is designed to preserve a connection between the learned model and audio-engineering practice. The network learns how strongly to apply processing, while the rendering stage remains structured around recognizable audio operations.
 
 \subsection{Architecture}
@@ -88,12 +94,12 @@ where $h$ is the encoded audio representation and $\gamma(\cdot)$ and $\beta(\cd
 
 Finally, the conditioned representation is mapped to parameters for a differentiable DSP chain. The chain includes loudness control, parametric equalization, multiband compression, limiting, and stereo-width adjustment. These modules are selected because they correspond to common mastering operations while remaining amenable to differentiable optimization.
 
-\begin{figure*}[!t]
+\begin{figure}[htbp]
 \centering
-\includegraphics[width=0.95\textwidth]{figures/fig_architecture_pipeline.png}
+\includegraphics[width=0.95\linewidth]{figures/fig_architecture_pipeline.png}
 \caption{GenreMaster pipeline. Audio features are encoded, modulated by learned genre embeddings, and mapped to parameters for a differentiable mastering-inspired DSP chain.}
 \label{fig:pipeline}
-\end{figure*}
+\end{figure}
 
 Training minimizes a weighted combination of loudness, spectral, dynamic, and perceptual terms:
 \begin{equation}
@@ -103,10 +109,23 @@ Training minimizes a weighted combination of loudness, spectral, dynamic, and pe
 \lambda_{\mathrm{dyn}}\mathcal{L}_{\mathrm{dyn}}+
 \lambda_{\mathrm{perc}}\mathcal{L}_{\mathrm{perc}}.
 \end{equation}
+Two components are particularly important for mastering-oriented behavior. The loudness term penalizes differences in global level using an RMS-based decibel approximation:
+\begin{equation}
+\mathcal{L}_{\mathrm{loud}} = \frac{1}{B}\sum_{i=1}^{B}\left|20\log_{10}(\mathrm{RMS}(\hat{y}_i)+\epsilon)-20\log_{10}(\mathrm{RMS}(y_i)+\epsilon)\right|,
+\end{equation}
+where $B$ is the batch size and $\epsilon$ is a small constant for numerical stability. The dynamic term penalizes differences in crest factor so that peak-to-average behavior is also matched:
+\begin{equation}
+\mathcal{L}_{\mathrm{dyn}} = \frac{1}{B}\sum_{i=1}^{B}\left|20\log_{10}\frac{p(\hat{y}_i)+\epsilon}{\mathrm{RMS}(\hat{y}_i)+\epsilon}-20\log_{10}\frac{p(y_i)+\epsilon}{\mathrm{RMS}(y_i)+\epsilon}\right|,
+\end{equation}
+where $p(\cdot)$ denotes a differentiable peak approximation.
 The loss design reflects the fact that mastering quality cannot be captured by a single waveform distance. Loudness alignment, spectral balance, dynamic behavior, and perceptual similarity each capture a different aspect of the desired transformation. In the present proof-of-concept, the loss is used to test learnability under controlled conditions rather than to define a complete perceptual mastering criterion.
 
 \subsection{Data and Experimental Setup}
-The experiment uses GTZAN after removing one corrupted file, yielding 999 valid clips across ten genres. The data are split in a stratified manner into training, validation, and test partitions, as summarized in Table~\ref{tab:data_split}. All audio is resampled to 22,050 Hz and represented as 30-second clips. Since GTZAN contains finished music rather than unmastered/mastered pairs, we construct synthetic training pairs to evaluate the model. We create the input by applying degradation operations that imitate common pre-mastering deficiencies, such as reduced loudness, spectral imbalance, and altered dynamics. Using the original clip as a pseudo-target provides a controlled learning problem, though it should not be interpreted as a faithful simulation of professional mastering.
+The experiment uses GTZAN after removing one corrupted file, yielding 999 valid clips across ten genres. The data are split in a stratified manner into training, validation, and test partitions, as summarized in Table~\ref{tab:data_split}. All audio is resampled to 22,050 Hz and represented as 30-second clips. Since GTZAN contains finished music rather than unmastered/mastered pairs, we construct synthetic training pairs to evaluate the model. We create the input by applying degradation operations that imitate common pre-mastering deficiencies. Using the original clip as a pseudo-target provides a controlled learning problem, though it should not be interpreted as a faithful simulation of professional mastering.
+
+To establish that the GTZAN labels provide a meaningful conditioning signal, we first trained a separate ResNet-based genre classifier on the same corpus. This auxiliary stage was used to verify that genre structure is discriminable in the dataset before running the mastering experiment. The reported Transformer-based mastering model was then trained with genre labels as the conditioning variable, using learned genre embeddings within the FiLM-conditioned parameter-prediction pipeline.
+
+For the mastering model, training was configured for a maximum of 50 epochs with validation monitored after each epoch. Gradient accumulation was used to increase the effective batch size, the learning rate followed a cosine schedule with a short warmup phase, and the best checkpoint was selected according to validation loss. Early stopping was enabled with a patience of 15 epochs without improvement, while intermediate checkpoints were saved periodically for recovery and inspection.
 
 \begin{table}[htbp]
 \caption{Dataset Split Configuration}
@@ -114,11 +133,11 @@ The experiment uses GTZAN after removing one corrupted file, yielding 999 valid 
 \centering
 \begin{tabular}{lcc}
 \toprule
-Set & Clips & Notes \\
+Set & Clips \\
 \midrule
-Training & 799 & Stratified by genre \\
-Validation & 99 & Stratified by genre \\
-Test & 101 & Stratified by genre \\
+Training & 799  \\
+Validation & 99  \\
+Test & 101 &  \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -131,15 +150,25 @@ Test & 101 & Stratified by genre \\
 \toprule
 Component & Value \\
 \midrule
+Random seed & 42 \\
 Sample rate & 22,050 Hz \\
 Clip duration & 30.0 s \\
 Batch size & 8 \\
 Gradient accumulation & 4 \\
+Effective batch size & 32 \\
+Maximum epochs & 50 \\
 Optimizer & AdamW \cite{loshchilov2017adamw} \\
+AdamW betas & $(0.9, 0.999)$ \\
+AdamW epsilon & $1\times10^{-8}$ \\
 Learning rate & $3\times10^{-4}$ \\
 Weight decay & $1\times10^{-4}$ \\
 Scheduler & Cosine with warmup \\
+Warmup epochs & 2 \\
 Gradient clipping & 1.0 \\
+Checkpoint interval & Every 5 epochs \\
+Model selection & Lowest validation loss \\
+Early stopping & Patience 15 \\
+Executed epochs & 32 \\
 Device backend & CUDA \\
 \bottomrule
 \end{tabular}
@@ -188,7 +217,7 @@ Fig.~\ref{fig:genreloss} reports test loss by genre. The losses remain within a 
 \end{figure}
 
 \subsection{Auxiliary Genre Separability}
-To verify that the dataset supports meaningful genre-conditioned modeling, we trained a ResNet-based genre classifier on the same corpus. The classifier reached high validation accuracy, as shown in Fig.~\ref{fig:clf}, indicating that the genre labels are learnable from the spectral representation. This result supports the use of genre as a conditioning variable, while also reinforcing that GTZAN genre labels are coarse and should not be treated as complete style descriptors.
+To verify that the dataset supports meaningful genre-conditioned modeling, we first trained a separate ResNet-based genre classifier on the same corpus. The classifier reached high validation accuracy, as shown in Fig.~\ref{fig:clf}, indicating that the genre labels are learnable from the spectral representation. This auxiliary result motivated the subsequent mastering experiment, in which genre labels were used as the conditioning signal for the Transformer-based model. At the same time, GTZAN genre labels remain coarse and should not be treated as complete style descriptors.
 
 \begin{figure}[htbp]
 \centering
