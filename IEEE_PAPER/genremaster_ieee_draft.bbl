@@ -21,6 +21,16 @@
 \providecommand{\BIBdecl}{\relax}
 \BIBdecl
 
+\bibitem{purwins2019deep}
+H.~Purwins, B.~Li, T.~Virtanen, J.~Schl{\"u}ter, S.-Y. Chang, and T.~Sainath,
+  ``Deep learning for audio signal processing,'' \emph{IEEE Journal of Selected
+  Topics in Signal Processing}, vol.~13, no.~2, pp. 206--219, 2019.
+
+\bibitem{mirbeygi2022speech}
+M.~Mirbeygi, A.~Mahabadi, and A.~Ranjbar, ``Speech and music separation
+  approaches-a survey,'' \emph{Multimedia Tools and Applications}, vol.~81,
+  no.~15, pp. 21\,155--21\,197, 2022.
+
 \bibitem{defossez2021real}
 A.~Defossez, G.~Synnaeve, and Y.~Adi, ``Real time speech enhancement in the
   waveform domain,'' in \emph{Proceedings of Interspeech}, 2020, pp.

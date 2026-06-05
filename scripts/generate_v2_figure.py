@@ -26,12 +26,12 @@ plt.plot(best_epoch, best_val_loss, 'r*', markersize=15, label=f'Best Val Loss: 
 
 plt.xlabel('Epoch', fontsize=12)
 plt.ylabel('Loss', fontsize=12)
-plt.title('V2 Transformer Training Trajectory', fontsize=14, fontweight='bold')
+plt.title('GenreMaster Training Trajectory', fontsize=14, fontweight='bold')
 plt.legend(loc='upper right', fontsize=10)
 plt.grid(True, alpha=0.3, linestyle='--')
 plt.tight_layout()
 
 # Save figure
-plt.savefig('IEEE_PAPER/figures/fig_v2_training_loss.png', dpi=300, bbox_inches='tight')
-print(f"Figure saved to IEEE_PAPER/figures/fig_v2_training_loss.png")
+plt.savefig('IEEE_PAPER/figures/fig_transformer_training_loss.png', dpi=300, bbox_inches='tight')
+print(f"Figure saved to IEEE_PAPER/figures/fig_transformer_training_loss.png")
 print(f"Best validation loss: {best_val_loss:.4f} at epoch {best_epoch}")
