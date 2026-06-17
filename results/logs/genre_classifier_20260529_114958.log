@@ -1,0 +1,70 @@
+======================================================================
+Genre Classifier Training (FMA Small - 8 Genres)
+======================================================================
+Device: mps
+Audio dir: /Volumes/LLModels/Datasets/fma_small
+Batch size: 32
+Epochs: 20
+Learning rate: 0.001
+
+Loading FMA Small dataset...
+Using FMA subset: SMALL
+✓ FMA metadata already exists at data/fma_metadata
+✓ Loaded 106574 total tracks
+✓ Loaded 163 genres
+✓ Filtered to 8000 tracks in small subset
+✓ Selected top 8 genres: ['Hip-Hop', 'Pop', 'Folk', 'Experimental', 'Rock', 'International', 'Electronic', 'Instrumental']
+Verifying audio files:   0%|          | 0/8000 [00:00<?, ?it/s]Verifying audio files: 100%|██████████| 8000/8000 [00:00<00:00, 194005.60it/s]
+✓ Found 8000 valid tracks across 8 genres
+TRAIN: 6400 tracks
+VAL: 800 tracks
+TEST: 800 tracks
+
+✅ FMA Medium dataset ready!
+   Train: 6400 tracks
+   Val: 800 tracks
+   Test: 800 tracks
+   Genres: 8
+
+✓ Loaded 8 genres:
+  0: Genre Electronic
+  1: Genre Experimental
+  2: Genre Folk
+  3: Genre Hip-Hop
+  4: Genre Instrumental
+  5: Genre International
+  6: Genre Pop
+  7: Genre Rock
+
+✓ Train batches: 200
+✓ Val batches: 25
+
+Creating CNN classifier...
+✓ Model parameters: 1,207,528
+
+======================================================================
+Starting Training
+======================================================================
+
+Epoch 1/20:   0%|          | 0/200 [00:00<?, ?it/s]Epoch 1/20:   0%|          | 0/200 [00:09<?, ?it/s]
+Traceback (most recent call last):
+  File "/Users/I558118/Documents/Projects/GenreMaster/experiments/train_genre_classifier.py", line 163, in <module>
+    main()
+    ~~~~^^
+  File "/Users/I558118/Documents/Projects/GenreMaster/experiments/train_genre_classifier.py", line 140, in main
+    model = train_genre_classifier(
+        model,
+    ...<4 lines>...
+        device=device,
+    )
+  File "/Users/I558118/Documents/Projects/GenreMaster/src/models/genre_classifier.py", line 299, in train_genre_classifier
+    logits = classifier(waveform)
+  File "/Users/I558118/Documents/Projects/GenreMaster/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/I558118/Documents/Projects/GenreMaster/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1789, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/Users/I558118/Documents/Projects/GenreMaster/src/models/genre_classifier.py", line 118, in forward
+    spectrogram = extractor.extract_log_mel(audio)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'AudioFeatureExtractor' object has no attribute 'extract_log_mel'

@@ -44,6 +44,9 @@ data/fma_metadata/raw_tracks.csv
 results/
 !results/**/*.json
 !results/logs/
+!results/logs/**
+!results/fma/logs/
+!results/fma/logs/**
 !results/checkpoints_v2
 
 *.wav
@@ -58,9 +61,8 @@ results/
 *.h5
 *.pkl
 
-# Logs
+# Logs (exclude top-level logs but keep results/logs)
 logs/
-*.log
 *.out
 *.err
 

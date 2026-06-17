@@ -1,0 +1,77 @@
+======================================================================
+Genre Classifier Training (FMA Small - 8 Genres)
+======================================================================
+Device: mps
+Audio dir: /Volumes/LLModels/Datasets/fma_small
+Batch size: 32
+Epochs: 20
+Learning rate: 0.001
+
+Loading FMA Small dataset...
+Using FMA subset: SMALL
+✓ FMA metadata already exists at data/fma_metadata
+✓ Loaded 106574 total tracks
+✓ Loaded 163 genres
+✓ Filtered to 8000 tracks in small subset
+✓ Selected top 8 genres: ['Hip-Hop', 'Pop', 'Folk', 'Experimental', 'Rock', 'International', 'Electronic', 'Instrumental']
+Verifying audio files:   0%|          | 0/8000 [00:00<?, ?it/s]Verifying audio files: 100%|██████████| 8000/8000 [00:00<00:00, 189888.47it/s]
+✓ Found 8000 valid tracks across 8 genres
+TRAIN: 6400 tracks
+VAL: 800 tracks
+TEST: 800 tracks
+
+✅ FMA Medium dataset ready!
+   Train: 6400 tracks
+   Val: 800 tracks
+   Test: 800 tracks
+   Genres: 8
+
+✓ Loaded 8 genres:
+  0: Genre Electronic
+  1: Genre Experimental
+  2: Genre Folk
+  3: Genre Hip-Hop
+  4: Genre Instrumental
+  5: Genre International
+  6: Genre Pop
+  7: Genre Rock
+
+✓ Train batches: 200
+✓ Val batches: 25
+
+Creating CNN classifier...
+✓ Model parameters: 1,207,528
+
+======================================================================
+Starting Training
+======================================================================
+
+Epoch 1/20:   0%|          | 0/200 [00:00<?, ?it/s]/Users/I558118/Documents/Projects/GenreMaster/.venv/lib/python3.13/site-packages/torch/functional.py:681: UserWarning: An output with one or more elements was resized since it had shape [], which does not match the required output shape [32, 2582, 1025]. This behavior is deprecated, and in a future PyTorch release outputs will not be resized unless they have zero elements. You can explicitly reuse an out tensor t by resizing it, inplace, to zero elements with t.resize_(0). (Triggered internally at /Users/runner/work/pytorch/pytorch/aten/src/ATen/native/Resize.cpp:38.)
+  return _VF.stft(  # type: ignore[attr-defined]
+Epoch 1/20:   0%|          | 1/200 [00:05<18:39,  5.62s/it]Epoch 1/20:   1%|          | 2/200 [00:12<20:04,  6.08s/it]Epoch 1/20:   2%|▏         | 3/200 [00:17<19:37,  5.98s/it]Epoch 1/20:   2%|▏         | 4/200 [00:23<19:23,  5.94s/it]Epoch 1/20:   2%|▎         | 5/200 [00:28<18:12,  5.60s/it]Epoch 1/20:   2%|▎         | 5/200 [00:31<20:35,  6.33s/it]
+Traceback (most recent call last):
+  File "/Users/I558118/Documents/Projects/GenreMaster/experiments/train_genre_classifier.py", line 163, in <module>
+    main()
+    ~~~~^^
+  File "/Users/I558118/Documents/Projects/GenreMaster/experiments/train_genre_classifier.py", line 140, in main
+    model = train_genre_classifier(
+        model,
+    ...<4 lines>...
+        device=device,
+    )
+  File "/Users/I558118/Documents/Projects/GenreMaster/src/models/genre_classifier.py", line 310, in train_genre_classifier
+    for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
+                 ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/I558118/Documents/Projects/GenreMaster/.venv/lib/python3.13/site-packages/tqdm/std.py", line 1181, in __iter__
+    for obj in iterable:
+               ^^^^^^^^
+  File "/Users/I558118/Documents/Projects/GenreMaster/.venv/lib/python3.13/site-packages/torch/utils/data/dataloader.py", line 718, in __next__
+    data = self._next_data()
+  File "/Users/I558118/Documents/Projects/GenreMaster/.venv/lib/python3.13/site-packages/torch/utils/data/dataloader.py", line 778, in _next_data
+    data = self._dataset_fetcher.fetch(index)  # may raise StopIteration
+  File "/Users/I558118/Documents/Projects/GenreMaster/.venv/lib/python3.13/site-packages/torch/utils/data/_utils/fetch.py", line 57, in fetch
+    return self.collate_fn(data)
+           ~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/I558118/Documents/Projects/GenreMaster/experiments/train_genre_classifier.py", line 39, in collate_fn
+    waveforms = torch.stack([item['waveform'][:, :min_length] for item in batch])
+RuntimeError: stack expects each tensor to be equal size, but got [2, 1321967] at entry 0 and [1, 1321967] at entry 23
