@@ -104,12 +104,20 @@ def main(config_path: str):
 
     seed_everything(cfg['experiment']['seed'])
     device = get_device()
-    print(f"Device: {device}")
 
     out_dir = Path(cfg['output']['checkpoint_dir'])
     log_dir = Path(cfg['output']['log_dir'])
     out_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use a log file that flushes immediately so progress is visible in real time
+    log_file = open(log_dir / 'mastering_train.log', 'w', buffering=1, encoding='utf-8')
+
+    def log(msg):
+        print(msg, flush=True)
+        print(msg, file=log_file, flush=True)
+
+    log(f"Device: {device}")
 
     # Data
     datasets, genre_to_idx = setup_fma_small(
@@ -120,7 +128,7 @@ def main(config_path: str):
         seed=cfg['experiment']['seed'],
         cache_dir=cfg['data'].get('cache_dir', None),
     )
-    print(f"Train: {len(datasets['train'])}  Val: {len(datasets['val'])}  Test: {len(datasets['test'])}")
+    log(f"Train: {len(datasets['train'])}  Val: {len(datasets['val'])}  Test: {len(datasets['test'])}")
 
     train_loader = DataLoader(datasets['train'], batch_size=cfg['training']['batch_size'],
                               shuffle=True, num_workers=cfg['device']['num_workers'],
@@ -143,7 +151,7 @@ def main(config_path: str):
         genre_latent_dim=cfg['model']['genre_latent_dim'],
         sample_rate=cfg['data']['sample_rate'],
     ).to(device)
-    print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
+    log(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     criterion = create_loss_function(
         sample_rate=cfg['data']['sample_rate'],
@@ -176,7 +184,7 @@ def main(config_path: str):
         history['val_loss'].append(val_loss)
         history['train_components'].append(components)
 
-        print(f"Epoch {epoch:3d} | train={train_loss:.4f}  val={val_loss:.4f} "
+        log(f"Epoch {epoch:3d} | train={train_loss:.4f}  val={val_loss:.4f} "
               f"| loud={components['loudness']:.3f} spec={components['spectral']:.3f} "
               f"dyn={components['dynamic']:.3f}")
 
@@ -192,11 +200,11 @@ def main(config_path: str):
                 'config': cfg,
                 'genre_to_idx': genre_to_idx,
             }, out_dir / 'best_model.pt')
-            print(f"  --> Saved best (val={best_val_loss:.4f})")
+            log(f"  --> Saved best (val={best_val_loss:.4f})")
         else:
             patience_counter += 1
             if patience_counter >= cfg['training']['patience']:
-                print(f"Early stopping at epoch {epoch}")
+                log(f"Early stopping at epoch {epoch}")
                 break
 
         if epoch % cfg['training']['save_every'] == 0:
