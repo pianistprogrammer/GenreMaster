@@ -1,0 +1,579 @@
+"""Main training script for GenreMaster with Trackio logging.
+
+Usage:
+    uv run python experiments/run_main.py --config configs/default.yaml
+    uv run python experiments/run_main.py --config configs/default.yaml --resume results/checkpoints/latest.pt
+"""
+
+import argparse
+import sys
+from pathlib import Path
+from typing import Dict, Optional
+import yaml
+import json
+import time
+import warnings
+
+# Filter PyTorch STFT resize warnings (harmless deprecation warnings)
+warnings.filterwarnings('ignore', message='.*An output with one or more elements was resized.*')
+# Filter pyloudnorm clipping warnings (expected during normalization)
+warnings.filterwarnings('ignore', message='.*Possible clipped samples in output.*')
+# Filter trackio reserved keys warning
+warnings.filterwarnings('ignore', message='.*Reserved keys renamed.*')
+
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, Subset
+from tqdm import tqdm
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from data.fma import setup_fma_medium
+from data.gtzan import setup_gtzan, GTZAN_GENRES
+from data.transforms import create_premaster_transforms
+from models.genremaster import create_genremaster_model
+from losses import create_loss_function
+from utils import seed_everything, get_device, save_audio
+import trackio
+
+
+def collate_fn(batch):
+    """Custom collate function for variable-length audio."""
+    # Ensure all waveforms have the same number of channels (convert to mono if needed)
+    processed_waveforms = []
+    for item in batch:
+        waveform = item['waveform']
+        # Convert to mono if stereo
+        if waveform.shape[0] > 1:
+            waveform = waveform.mean(dim=0, keepdim=True)
+        processed_waveforms.append(waveform)
+
+    min_length = min(w.shape[1] for w in processed_waveforms)
+    waveforms = torch.stack([w[:, :min_length] for w in processed_waveforms])
+    genre_indices = torch.tensor([item['genre_idx'] for item in batch])
+
+    # Handle both FMA (track_id) and GTZAN (file_name)
+    if 'track_id' in batch[0]:
+        track_ids = [item['track_id'] for item in batch]
+    else:
+        track_ids = [item.get('file_name', f'track_{i}') for i, item in enumerate(batch)]
+
+    return {
+        'waveform': waveforms,
+        'genre_idx': genre_indices,
+        'track_id': track_ids,
+    }
+
+
+def load_config(config_path: str) -> Dict:
+    """Load configuration from YAML file."""
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+
+def create_dataloaders(config: Dict):
+    """Create train and validation dataloaders."""
+    dataset_type = config['data'].get('dataset', 'fma')
+
+    if dataset_type.lower() == 'gtzan':
+        # Use GTZAN dataset
+        datasets, genre_to_idx = setup_gtzan(
+            audio_dir=Path(config['data']['audio_dir']),
+            sr=config['data'].get('sample_rate', 22050),
+            duration=config['data'].get('duration', 30.0),
+        )
+    else:
+        # Use FMA dataset
+        datasets, genre_to_idx = setup_fma_medium(
+            data_root=Path(config['data']['root_dir']),
+            audio_dir=Path(config['data']['audio_dir']),
+            top_k_genres=config['data'].get('top_k_genres', 8),
+            samples_per_genre=config['data'].get('samples_per_genre'),
+        )
+
+    # Limit dataset size if specified
+    if config['data'].get('n_train_samples'):
+        n_train = min(config['data']['n_train_samples'], len(datasets['train']))
+        datasets['train'] = Subset(datasets['train'], range(n_train))
+
+    if config['data'].get('n_val_samples'):
+        n_val = min(config['data']['n_val_samples'], len(datasets['val']))
+        datasets['val'] = Subset(datasets['val'], range(n_val))
+
+    # Create dataloaders
+    train_loader = DataLoader(
+        datasets['train'],
+        batch_size=config['training']['batch_size'],
+        shuffle=True,
+        num_workers=config['device']['num_workers'],
+        collate_fn=collate_fn,
+    )
+
+    val_loader = DataLoader(
+        datasets['val'],
+        batch_size=config['training']['batch_size'],
+        shuffle=False,
+        num_workers=config['device']['num_workers'],
+        collate_fn=collate_fn,
+    )
+
+    return train_loader, val_loader, genre_to_idx
+
+
+def save_checkpoint(
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: Optional[torch.optim.lr_scheduler._LRScheduler],
+    epoch: int,
+    best_val_loss: float,
+    config: Dict,
+    checkpoint_path: Path,
+):
+    """Save training checkpoint."""
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'best_val_loss': best_val_loss,
+        'config': config,
+    }
+
+    if scheduler is not None:
+        checkpoint['scheduler_state_dict'] = scheduler.state_dict()
+
+    torch.save(checkpoint, checkpoint_path)
+    print(f"✓ Checkpoint saved: {checkpoint_path}")
+
+
+def load_checkpoint(
+    checkpoint_path: Path,
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: Optional[torch.optim.lr_scheduler._LRScheduler],
+    device: torch.device,
+) -> tuple:
+    """Load training checkpoint."""
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    if scheduler is not None and 'scheduler_state_dict' in checkpoint:
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+
+    epoch = checkpoint['epoch']
+    best_val_loss = checkpoint['best_val_loss']
+
+    print(f"✓ Checkpoint loaded: {checkpoint_path}")
+    print(f"  Resuming from epoch {epoch}, best val loss: {best_val_loss:.6f}")
+
+    return epoch, best_val_loss
+
+
+def train_epoch(
+    model: nn.Module,
+    train_loader: DataLoader,
+    criterion: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    transforms: tuple,
+    config: Dict,
+    epoch: int,
+) -> Dict[str, float]:
+    """Train for one epoch."""
+    model.train()
+    train_transform, _ = transforms
+
+    total_loss = 0.0
+    loss_components = {'loudness': 0.0, 'spectral': 0.0, 'dynamic': 0.0, 'perceptual': 0.0}
+    num_batches = 0
+
+    pbar = tqdm(train_loader, desc=f"Epoch {epoch}")
+
+    for batch_idx, batch in enumerate(pbar):
+        waveform = batch['waveform'].to(device)
+        genre_idx = batch['genre_idx'].to(device)
+
+        # Create pre-master and targets
+        pre_masters = []
+        targets = []
+        for i in range(waveform.shape[0]):
+            pre_master, target = train_transform(waveform[i])
+            pre_masters.append(pre_master)
+            targets.append(target)
+
+        pre_master_batch = torch.stack(pre_masters).to(device)
+        target_batch = torch.stack(targets).to(device)
+
+        # Forward pass
+        optimizer.zero_grad()
+        output = model(pre_master_batch, genre_idx)
+
+        # Check for NaN in output - this is CRITICAL
+        if torch.isnan(output).any():
+            print(f"\n[CRITICAL] NaN in output at epoch {epoch}, batch {batch_idx}!")
+            print(f"  Input range: [{pre_master_batch.min():.4f}, {pre_master_batch.max():.4f}]")
+            # Check which layer has NaN weights
+            for name, param in model.named_parameters():
+                if torch.isnan(param).any():
+                    print(f"  NaN in param: {name}")
+                    break
+            raise RuntimeError("NaN detected - stopping training to investigate")
+
+        # Compute loss
+        losses = criterion(output, target_batch, return_components=True)
+
+        # Check for NaN in loss
+        if torch.isnan(losses['total']) or torch.isinf(losses['total']):
+            print(f"\n[CRITICAL] NaN/Inf loss at epoch {epoch}, batch {batch_idx}: {losses['total'].item()}")
+            raise RuntimeError("NaN loss detected - stopping training")
+
+        # Backward pass
+        losses['total'].backward()
+
+        # Check for NaN in gradients BEFORE clipping
+        max_grad = 0.0
+        has_nan_grad = False
+        for name, param in model.named_parameters():
+            if param.grad is not None:
+                grad_max = param.grad.abs().max().item()
+                if grad_max > max_grad:
+                    max_grad = grad_max
+                if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+                    has_nan_grad = True
+                    print(f"\n[WARNING] NaN/Inf gradient in {name} at batch {batch_idx} - skipping batch")
+                    break
+
+        if has_nan_grad:
+            # Skip this batch instead of crashing - zero gradients and continue
+            optimizer.zero_grad()
+            continue
+
+        # Log max gradient occasionally
+        if batch_idx % 50 == 0:
+            print(f" [grad_max={max_grad:.2f}]", end="")
+
+        # Gradient clipping (more aggressive)
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            model.parameters(),
+            config['training'].get('grad_clip', 0.5)
+        )
+
+        optimizer.step()
+
+        # Accumulate losses
+        total_loss += losses['total'].item()
+        for key in loss_components:
+            loss_components[key] += losses[key].item()
+        num_batches += 1
+
+        # Update progress bar
+        pbar.set_postfix({'loss': losses['total'].item()})
+
+        # Log to Trackio
+        if config['logging']['use_trackio'] and batch_idx % config['logging']['log_every'] == 0:
+            step = epoch * len(train_loader) + batch_idx
+            trackio.log({
+                'train/loss': losses['total'].item(),
+                'train/loss_loudness': losses['loudness'].item(),
+                'train/loss_spectral': losses['spectral'].item(),
+                'train/loss_dynamic': losses['dynamic'].item(),
+                'train/loss_perceptual': losses['perceptual'].item(),
+                'train/lr': optimizer.param_groups[0]['lr'],
+                'epoch': epoch,
+                'step': step,
+            })
+
+    # Average losses
+    avg_loss = total_loss / num_batches
+    for key in loss_components:
+        loss_components[key] /= num_batches
+
+    return {'total': avg_loss, **loss_components}
+
+
+def validate_epoch(
+    model: nn.Module,
+    val_loader: DataLoader,
+    criterion: nn.Module,
+    device: torch.device,
+    transforms: tuple,
+    epoch: int,
+) -> Dict[str, float]:
+    """Validate for one epoch."""
+    model.eval()
+    _, val_transform = transforms
+
+    total_loss = 0.0
+    loss_components = {'loudness': 0.0, 'spectral': 0.0, 'dynamic': 0.0, 'perceptual': 0.0}
+    num_batches = 0
+
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(tqdm(val_loader, desc=f"Validation")):
+            waveform = batch['waveform'].to(device)
+            genre_idx = batch['genre_idx'].to(device)
+
+            # Create pre-master and targets
+            pre_masters = []
+            targets = []
+            for i in range(waveform.shape[0]):
+                pre_master, target = val_transform(waveform[i])
+                pre_masters.append(pre_master)
+                targets.append(target)
+
+            pre_master_batch = torch.stack(pre_masters).to(device)
+            target_batch = torch.stack(targets).to(device)
+
+            # Forward pass
+            output = model(pre_master_batch, genre_idx)
+
+            # Debug: print shapes and ranges on first batch
+            if batch_idx == 0 and epoch == 0:
+                print(f"\n[DEBUG] Validation batch 0:")
+                print(f"  pre_master: shape={pre_master_batch.shape}, range=[{pre_master_batch.min():.4f}, {pre_master_batch.max():.4f}]")
+                print(f"  target: shape={target_batch.shape}, range=[{target_batch.min():.4f}, {target_batch.max():.4f}]")
+                print(f"  output: shape={output.shape}, range=[{output.min():.4f}, {output.max():.4f}]")
+
+            # Compute loss
+            losses = criterion(output, target_batch, return_components=True)
+
+            # Debug: print losses on first batch
+            if batch_idx == 0 and epoch == 0:
+                print(f"  losses: total={losses['total'].item():.4f}, loudness={losses['loudness'].item():.4f}, spectral={losses['spectral'].item():.4f}, dynamic={losses['dynamic'].item():.4f}, perceptual={losses['perceptual'].item():.4f}")
+
+            # Accumulate
+            total_loss += losses['total'].item()
+            for key in loss_components:
+                loss_components[key] += losses[key].item()
+            num_batches += 1
+
+    # Average
+    avg_loss = total_loss / num_batches
+    for key in loss_components:
+        loss_components[key] /= num_batches
+
+    return {'total': avg_loss, **loss_components}
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Train GenreMaster model")
+    parser.add_argument('--config', type=str, default='configs/default.yaml',
+                        help='Path to config file')
+    parser.add_argument('--resume', type=str, default=None,
+                        help='Path to checkpoint to resume from')
+    args = parser.parse_args()
+
+    # Load config
+    config = load_config(args.config)
+    seed_everything(config['experiment']['seed'])
+
+    print("=" * 70)
+    print("GenreMaster Training")
+    print("=" * 70)
+    print(f"Experiment: {config['experiment']['name']}")
+    print(f"Config: {args.config}\n")
+
+    # Setup device
+    device = get_device()
+    print(f"Device: {device}\n")
+
+    # Create output directories
+    checkpoint_dir = Path(config['output']['checkpoint_dir'])
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    log_dir = Path(config['output']['log_dir'])
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Initialize training history
+    training_history = {
+        'config': config,
+        'experiment_name': config['experiment']['name'],
+        'start_time': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'device': str(device),
+        'epochs': []
+    }
+    history_path = log_dir / 'training_history.json'
+
+    # Initialize Trackio
+    if config['logging']['use_trackio']:
+        trackio.init(
+            project=config['logging']['trackio']['project'],
+        )
+        print("✓ Trackio initialized\n")
+
+    # Create dataloaders
+    print("Loading datasets...")
+    train_loader, val_loader, genre_to_idx = create_dataloaders(config)
+    print(f"✓ Train batches: {len(train_loader)}")
+    print(f"✓ Val batches: {len(val_loader)}")
+    print(f"✓ Genres: {len(genre_to_idx)}\n")
+
+    # Create transforms
+    train_transform, val_transform = create_premaster_transforms(
+        target_lufs=config['data']['target_lufs'],
+        sample_rate=config['data']['sample_rate'],
+        augment_train=config['data']['augment_train'],
+    )
+
+    # Create model
+    print("Creating model...")
+    model = create_genremaster_model(
+        n_genres=len(genre_to_idx),
+        encoder_type=config['model']['encoder_type'],
+        conditioned=config['model']['conditioned'],
+        sample_rate=config['data']['sample_rate'],
+    ).to(device)
+
+    param_counts = model.get_parameter_count()
+    print(f"✓ Total parameters: {param_counts['total']:,}\n")
+
+    # Create loss
+    criterion = create_loss_function(
+        sample_rate=config['data']['sample_rate'],
+        loss_weights=config['loss']['weights'],
+    )
+
+    # Create optimizer
+    if config['optimizer']['name'] == 'adam':
+        optimizer = torch.optim.Adam(
+            model.parameters(),
+            lr=config['training']['learning_rate'],
+            betas=config['optimizer']['betas'],
+            eps=config['optimizer']['eps'],
+            weight_decay=config['training']['weight_decay'],
+        )
+    else:
+        raise ValueError(f"Unknown optimizer: {config['optimizer']['name']}")
+
+    # Create scheduler
+    scheduler = None
+    if config['training']['lr_scheduler'] == 'cosine':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=config['training']['num_epochs'] - config['training']['warmup_epochs'],
+        )
+
+    # Resume from checkpoint if specified
+    start_epoch = 0
+    best_val_loss = float('inf')
+
+    if args.resume:
+        start_epoch, best_val_loss = load_checkpoint(
+            Path(args.resume), model, optimizer, scheduler, device
+        )
+        start_epoch += 1  # Start from next epoch
+
+    # Training loop
+    print("=" * 70)
+    print("Starting Training")
+    print("=" * 70)
+
+    for epoch in range(start_epoch, config['training']['num_epochs']):
+        print(f"\nEpoch {epoch + 1}/{config['training']['num_epochs']}")
+        epoch_start_time = time.time()
+
+        # Train
+        train_losses = train_epoch(
+            model, train_loader, criterion, optimizer, device,
+            (train_transform, val_transform), config, epoch
+        )
+
+        print(f"Train loss: {train_losses['total']:.6f}")
+
+        # Validate
+        val_losses = validate_epoch(
+            model, val_loader, criterion, device,
+            (train_transform, val_transform), epoch
+        )
+
+        print(f"Val loss: {val_losses['total']:.6f}")
+
+        epoch_time = time.time() - epoch_start_time
+
+        # Save epoch metrics to history
+        epoch_data = {
+            'epoch': epoch + 1,
+            'train_loss': train_losses['total'],
+            'train_loss_components': {
+                'loudness': train_losses['loudness'],
+                'spectral': train_losses['spectral'],
+                'dynamic': train_losses['dynamic'],
+                'perceptual': train_losses['perceptual']
+            },
+            'val_loss': val_losses['total'],
+            'val_loss_components': {
+                'loudness': val_losses['loudness'],
+                'spectral': val_losses['spectral'],
+                'dynamic': val_losses['dynamic'],
+                'perceptual': val_losses['perceptual']
+            },
+            'learning_rate': optimizer.param_groups[0]['lr'],
+            'epoch_time_seconds': epoch_time,
+            'is_best': val_losses['total'] < best_val_loss
+        }
+        training_history['epochs'].append(epoch_data)
+
+        # Save history to JSON after each epoch
+        with open(history_path, 'w') as f:
+            json.dump(training_history, f, indent=2)
+
+        # Log to Trackio
+        if config['logging']['use_trackio']:
+            trackio.log({
+                'val/loss': val_losses['total'],
+                'val/loss_loudness': val_losses['loudness'],
+                'val/loss_spectral': val_losses['spectral'],
+                'val/loss_dynamic': val_losses['dynamic'],
+                'val/loss_perceptual': val_losses['perceptual'],
+                'epoch': epoch,
+            })
+
+        # Step scheduler
+        if scheduler is not None:
+            scheduler.step()
+
+        # Save checkpoint
+        if (epoch + 1) % config['training']['save_every'] == 0:
+            checkpoint_path = checkpoint_dir / f"checkpoint_epoch_{epoch + 1}.pt"
+            save_checkpoint(
+                model, optimizer, scheduler, epoch,
+                best_val_loss, config, checkpoint_path
+            )
+
+        # Save best model
+        if val_losses['total'] < best_val_loss:
+            best_val_loss = val_losses['total']
+            best_path = checkpoint_dir / "best_model.pt"
+            save_checkpoint(
+                model, optimizer, scheduler, epoch,
+                best_val_loss, config, best_path
+            )
+            print(f"✓ New best model saved! Val loss: {best_val_loss:.6f}")
+
+    # Save final model
+    final_path = checkpoint_dir / "final_model.pt"
+    save_checkpoint(
+        model, optimizer, scheduler,
+        config['training']['num_epochs'] - 1,
+        best_val_loss, config, final_path
+    )
+
+    # Finalize training history
+    training_history['end_time'] = time.strftime('%Y-%m-%d %H:%M:%S')
+    training_history['best_val_loss'] = best_val_loss
+    training_history['total_epochs'] = len(training_history['epochs'])
+
+    with open(history_path, 'w') as f:
+        json.dump(training_history, f, indent=2)
+
+    print("\n" + "=" * 70)
+    print("Training Complete!")
+    print("=" * 70)
+    print(f"Best validation loss: {best_val_loss:.6f}")
+    print(f"Checkpoints saved to: {checkpoint_dir}")
+    print(f"Training history saved to: {history_path}")
+
+
+if __name__ == "__main__":
+    main()
