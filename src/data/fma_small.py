@@ -26,6 +26,7 @@ class FMASmallDataset(Dataset):
         metadata: pd.DataFrame,
         sample_rate: int = 22050,
         duration: float = 30.0,
+        cache_dir: Optional[Path] = None,
     ):
         self.audio_dir = Path(audio_dir)
         self.genre_to_idx = genre_to_idx
@@ -34,6 +35,7 @@ class FMASmallDataset(Dataset):
         self.sample_rate = sample_rate
         self.target_length = int(sample_rate * duration)
         self.track_ids = track_ids
+        self.cache_dir = Path(cache_dir) if cache_dir else None
 
     def __len__(self) -> int:
         return len(self.track_ids)
@@ -48,6 +50,19 @@ class FMASmallDataset(Dataset):
         genre_idx = self.genre_to_idx[genre_str]
 
         try:
+            # Use preprocessed cache if available
+            if self.cache_dir is not None:
+                cache_path = self.cache_dir / f"{track_id}.pt"
+                if cache_path.exists():
+                    waveform = torch.load(cache_path, weights_only=True)
+                    return {
+                        'waveform': waveform,
+                        'genre_idx': genre_idx,
+                        'genre': genre_str,
+                        'track_id': track_id,
+                        'sample_rate': self.sample_rate,
+                    }
+
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 waveform, sr = torchaudio.load(str(self._audio_path(track_id)))
@@ -85,6 +100,7 @@ def setup_fma_small(
     sample_rate: int = 22050,
     duration: float = 30.0,
     seed: int = 42,
+    cache_dir: Optional[str] = None,
 ) -> Tuple[Dict[str, FMASmallDataset], Dict[str, int]]:
     """
     Load FMA-small using the official train/validation/test splits from the
@@ -114,7 +130,8 @@ def setup_fma_small(
     for fma_split, split_name in split_map.items():
         ids = small[small['set', 'split'] == fma_split].index.tolist()
         datasets[split_name] = FMASmallDataset(
-            ids, audio_dir, genre_to_idx, small, sample_rate, duration
+            ids, audio_dir, genre_to_idx, small, sample_rate, duration,
+            cache_dir=Path(cache_dir) if cache_dir else None,
         )
 
     return datasets, genre_to_idx

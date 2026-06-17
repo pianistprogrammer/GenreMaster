@@ -117,6 +117,7 @@ def main(config_path: str):
         sample_rate=cfg['data']['sample_rate'],
         duration=cfg['data']['duration'],
         seed=cfg['experiment']['seed'],
+        cache_dir=cfg['data'].get('cache_dir', None),
     )
     print(f"Train: {len(datasets['train'])}  Val: {len(datasets['val'])}  Test: {len(datasets['test'])}")
 
