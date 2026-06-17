@@ -1,13 +1,14 @@
 # Fdb version 4
-["bibtex genremaster_ieee_draft"] 1780662895.37311 "genremaster_ieee_draft.aux" "genremaster_ieee_draft.bbl" "genremaster_ieee_draft" 1780662897.05585 0
+["bibtex genremaster_ieee_draft"] 1781681656.19088 "genremaster_ieee_draft.aux" "genremaster_ieee_draft.bbl" "genremaster_ieee_draft" 1781681736.82982 0
   "./references.bib" 1780660457.23467 5917 4c84646d6f72aff5840175e840f3825b ""
   "/usr/local/texlive/2026/texmf-dist/bibtex/bst/ieeetran/IEEEtran.bst" 1440712899 57748 7c8250ecf02814ce6ddc0cdbb63df1dd ""
-  "genremaster_ieee_draft.aux" 1780662896.6685 4139 56dc5370618b9fdf2813644435f1896f "pdflatex"
+  "genremaster_ieee_draft.aux" 1781681736.61217 4223 7121421bd243a4dc29350eadd8fb2792 "pdflatex"
   (generated)
   "genremaster_ieee_draft.bbl"
   "genremaster_ieee_draft.blg"
   (rewritten before read)
-["pdflatex"] 1780662895.46585 "genremaster_ieee_draft.tex" "genremaster_ieee_draft.pdf" "genremaster_ieee_draft" 1780662897.05602 0
+["pdflatex"] 1781681735.3699 "/Users/I558118/Documents/Projects/GenreMaster/IEEE_PAPER/genremaster_ieee_draft.tex" "genremaster_ieee_draft.pdf" "genremaster_ieee_draft" 1781681736.83006 0
+  "/Users/I558118/Documents/Projects/GenreMaster/IEEE_PAPER/genremaster_ieee_draft.tex" 1781681735.17457 27769 0ef3e938d8fb01328b9842a46f9c0d82 ""
   "/usr/local/texlive/2026/texmf-dist/fonts/enc/dvips/base/8r.enc" 1165713224 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
   "/usr/local/texlive/2026/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/local/texlive/2026/texmf-dist/fonts/tfm/adobe/times/ptmb7t.tfm" 1136768653 2172 fd0c924230362ff848a33632ed45dc23 ""
@@ -77,6 +78,7 @@
   "/usr/local/texlive/2026/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg" 1279039959 678 4792914a8f45be57bb98413425e4c7af ""
   "/usr/local/texlive/2026/texmf-dist/tex/latex/placeins/placeins.sty" 1137110565 4087 636308456f60d2b31cbf97867db5708d ""
   "/usr/local/texlive/2026/texmf-dist/tex/latex/psnfss/ot1ptm.fd" 1137110629 961 15056f4a61917ceed3a44e4ac11fcc52 ""
+  "/usr/local/texlive/2026/texmf-dist/tex/latex/sttools/cuted.sty" 1767996371 32452 41238b2d586e047f606df7dbfc1c149f ""
   "/usr/local/texlive/2026/texmf-dist/tex/latex/sttools/stfloats.sty" 1750880090 19135 2044f4970d2ece01df5d5dfacaaaec0f ""
   "/usr/local/texlive/2026/texmf-dist/tex/latex/tools/array.sty" 1761946296 15651 9d7c62df82cb29a555c00550babfe364 ""
   "/usr/local/texlive/2026/texmf-dist/tex/latex/tools/verbatim.sty" 1748806692 7532 26d26e9d8f2ca784270d5da8ec7d102b ""
@@ -90,9 +92,9 @@
   "figures/fig_classifier_val_accuracy.png" 1780323077.60899 168435 e3438f2cf167c44ae36d05398dcbbdb6 ""
   "figures/fig_transformer_per_genre_test_loss.png" 1780661611.14127 113871 7796b0dd35c738ab195dd2f5845c0da6 ""
   "figures/fig_transformer_training_loss.png" 1780661611.05716 130864 790212e57aa3a7b8bd6f72638c9896b1 ""
-  "genremaster_ieee_draft.aux" 1780662896.6685 4139 56dc5370618b9fdf2813644435f1896f "pdflatex"
-  "genremaster_ieee_draft.bbl" 1780662895.46305 5377 3e3acb8901824c17612006f668e0880e "bibtex genremaster_ieee_draft"
-  "genremaster_ieee_draft.tex" 1780662892.95417 25690 4151b4924a922fa9f6b5704fe8bc60ee ""
+  "genremaster_ieee_draft.aux" 1781681736.61217 4223 7121421bd243a4dc29350eadd8fb2792 "pdflatex"
+  "genremaster_ieee_draft.bbl" 1781681656.27965 5289 cbb424200a89dc3d34dbae49c601e586 "bibtex genremaster_ieee_draft"
+  "genremaster_ieee_draft.tex" 1781681735.17457 27769 0ef3e938d8fb01328b9842a46f9c0d82 ""
   (generated)
   "genremaster_ieee_draft.aux"
   "genremaster_ieee_draft.log"
