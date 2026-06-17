@@ -23,7 +23,7 @@ def get_device() -> torch.device:
     try:
         torch.cuda.init()
         if torch.cuda.is_available():
-            print(f"✓ CUDA available - using GPU: {torch.cuda.get_device_name(0)}")
+            print(f"CUDA available - using GPU: {torch.cuda.get_device_name(0)}")
             return torch.device("cuda")
     except Exception as e:
         print(f"Note: CUDA init failed ({e}), checking availability...")
