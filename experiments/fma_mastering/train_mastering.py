@@ -79,6 +79,7 @@ def train_epoch(model, loader, criterion, optimizer, transform, device, grad_cli
 def val_epoch(model, loader, criterion, transform, device):
     model.eval()
     total_loss, n = 0.0, 0
+    component_sums = {'loudness': 0., 'spectral': 0., 'dynamic': 0., 'perceptual': 0.}
     for waveforms, genre_idxs, genres in loader:
         inputs, targets = [], []
         for wav, genre in zip(waveforms, genres):
@@ -90,12 +91,18 @@ def val_epoch(model, loader, criterion, transform, device):
         genre_idxs = genre_idxs.to(device)
 
         outputs = model(inputs, genre_idxs)
-        loss = criterion(outputs, targets)
+        components = criterion(outputs, targets, return_components=True)
+        loss = components['total']
         if torch.isfinite(loss):
-            total_loss += loss.item() * len(genres)
-            n += len(genres)
+            bs = len(genres)
+            total_loss += loss.item() * bs
+            n += bs
+            for k in component_sums:
+                v = components.get(k, 0.)
+                component_sums[k] += (v.item() if hasattr(v, 'item') else float(v)) * bs
 
-    return total_loss / max(n, 1)
+    avg_components = {k: v / max(n, 1) for k, v in component_sums.items()}
+    return total_loss / max(n, 1), avg_components
 
 
 def main(config_path: str):
@@ -177,7 +184,7 @@ def main(config_path: str):
     for epoch in range(1, cfg['training']['num_epochs'] + 1):
         train_loss, components = train_epoch(model, train_loader, criterion, optimizer,
                                              transform, device, cfg['training']['grad_clip'], epoch)
-        val_loss = val_epoch(model, val_loader, criterion, transform, device)
+        val_loss, val_components = val_epoch(model, val_loader, criterion, transform, device)
         scheduler.step()
 
         history['train_loss'].append(train_loss)
@@ -186,7 +193,9 @@ def main(config_path: str):
 
         log(f"Epoch {epoch:3d} | train={train_loss:.4f}  val={val_loss:.4f} "
               f"| loud={components['loudness']:.3f} spec={components['spectral']:.3f} "
-              f"dyn={components['dynamic']:.3f}")
+              f"dyn={components['dynamic']:.3f} "
+              f"| val_loud={val_components['loudness']:.3f} val_spec={val_components['spectral']:.3f} "
+              f"val_dyn={val_components['dynamic']:.3f}")
 
         if val_loss < best_val_loss - cfg['training']['min_delta']:
             best_val_loss = val_loss
