@@ -5,9 +5,10 @@ experiment:
 
 data:
   dataset: "fma_small"
-  audio_dir: "/Volumes/LLModels/Datasets/fma_small"
-  metadata_csv: "/Users/I558118/Documents/Projects/GenreMaster/data/fma_metadata/tracks.csv"
-  lufs_priors: "/Users/I558118/Documents/Projects/GenreMaster/experiments/fma_mastering/genre_lufs_priors.json"
+  audio_dir: "C:/Users/jerem/Documents/Datasets/fma_small"
+  metadata_csv: "C:/Users/jerem/Documents/Datasets/fma_metadata/tracks.csv"
+  lufs_priors: "C:/Users/jerem/Documents/Projects/GenreMaster/experiments/fma_mastering/genre_lufs_priors.json"
+  cache_dir: "C:/Users/jerem/Documents/Projects/GenreMaster/data/fma_cache"
   sample_rate: 22050
   duration: 30.0
   n_genres: 8
@@ -50,11 +51,8 @@ device:
   num_workers: 0
 
 logging:
-  use_trackio: true
+  use_trackio: false
   log_every: 10
-  trackio:
-    project: "genremaster"
-    experiment: "fma-mastering"
 
 output:
   checkpoint_dir: "results/fma/checkpoints"
