@@ -1,5 +1,6 @@
 \documentclass[journal]{IEEEtran}
 \usepackage{amsmath,amsfonts}
+\usepackage{cuted}
 \usepackage{array}
 \usepackage{textcomp}
 \usepackage{stfloats}
@@ -25,7 +26,7 @@
 \maketitle
 
 \begin{abstract}
-Audio mastering is inherently style dependent: the same spectral, dynamic, and loudness decisions that improve one genre may be inappropriate for another. Existing neural audio enhancement systems rarely model this dependency explicitly, and the lack of large paired mastering datasets makes direct supervised automatic mastering difficult to study. This paper presents GenreMaster, a genre-conditioned audio enhancement framework that combines Transformer-based spectral encoding, feature-wise linear modulation, learnable genre embeddings, and differentiable digital signal processing. Rather than generating audio directly, the model predicts interpretable processing parameters for a mastering-inspired effect chain. We evaluate the framework on GTZAN using controlled synthetic degradation as a proof-of-concept setting. The results show that genre-conditioned transformations can be learned end-to-end and that differentiable DSP provides a useful bridge between neural optimization and audio-engineering structure. The study does not claim production-ready mastering; instead, it identifies a practical path toward genre-aware automatic mastering once suitable paired datasets and perceptual evaluations become available.
+Audio mastering is inherently style dependent: the same spectral, dynamic, and loudness decisions that improve one genre may be inappropriate for another. Existing neural audio enhancement systems rarely model this dependency explicitly, and the lack of large paired mastering datasets makes direct supervised automatic mastering difficult to study. This paper presents GenreMaster, a genre-conditioned audio enhancement framework that combines Transformer-based spectral encoding, feature-wise linear modulation, learnable genre embeddings, and differentiable digital signal processing. Rather than generating audio directly, the model predicts interpretable processing parameters for a mastering-inspired effect chain. We evaluate the framework on GTZAN using a controlled loudness-normalization protocol as a proof-of-concept setting. The results show that genre-conditioned transformations can be learned end-to-end and that differentiable DSP provides a useful bridge between neural optimization and audio-engineering structure. The study does not claim production-ready mastering; instead, it identifies a practical path toward genre-aware automatic mastering once suitable paired datasets and perceptual evaluations become available.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -39,15 +40,15 @@ Developing automatic mastering systems also faces a data bottleneck. Supervised 
 
 This paper investigates genre-conditioned neural audio enhancement as a step toward automatic mastering. We introduce GenreMaster, a framework that encodes audio features with a Transformer, represents genre labels through learned embeddings, injects those embeddings using feature-wise linear modulation (FiLM), and renders the output through a differentiable digital signal processing (DSP) chain. The model therefore learns to predict parameters for interpretable audio operations rather than directly synthesizing a waveform.
 
-To evaluate GenreMaster in a proof-of-concept setting, we utilize the GTZAN dataset to bypass the lack of large, paired mastering datasets. We construct synthetic input-target pairs by applying pre-mastering-like degradation to finished audio, then training the model to recover the original signal characteristics. This intentionally limited setup tests whether the proposed conditioning and differentiable processing architecture can learn controlled, genre-dependent transformations, rather than attempting to replace a professional mastering engineer.
+To evaluate GenreMaster in a proof-of-concept setting, we utilize the GTZAN dataset to bypass the lack of large, paired mastering datasets. We construct synthetic input-target pairs by normalizing each clip to a fixed integrated loudness target of $-18\,\mathrm{LUFS}$ and using the original clip as the reconstruction target. The model therefore learns to recover the original loudness level from a loudness-shifted input. This intentionally limited setup tests whether the proposed conditioning and differentiable processing architecture can learn controlled, genre-dependent transformations, rather than attempting to replace a professional mastering engineer.
 
-The central question addressed in this paper is: can genre information improve a neural audio enhancement pipeline when the processing itself is constrained to an interpretable differentiable DSP chain? The results indicate that the proposed architecture learns stable transformations across the GTZAN genres, generalizes from validation to test data, and provides a useful experimental foundation for future work with real mastering pairs.
+The central question addressed in this paper is: can genre information improve a neural audio enhancement pipeline when the processing itself is constrained to an interpretable differentiable DSP chain?
 
 The main contributions of this paper are as follows:
 \begin{itemize}
 \item We present a genre-conditioned audio enhancement framework that combines Transformer spectral encoding, learned genre embeddings, FiLM conditioning, and differentiable DSP.
 \item We formulate mastering-inspired enhancement as interpretable parameter prediction rather than direct waveform generation.
-\item We evaluate the framework in a controlled GTZAN proof-of-concept setting with synthetic degradation and stratified genre splits.
+\item We evaluate the framework in a controlled GTZAN proof-of-concept setting using a loudness-normalization protocol with stratified genre splits.
 \item We analyze the gap between controlled reconstruction performance and production-ready automatic mastering, identifying dataset, evaluation, and style-representation requirements for future work.
 \end{itemize}
 
@@ -58,7 +59,7 @@ Genre classification has long served as a central task in music information retr
 
 Feature-wise linear modulation provides a simple mechanism for injecting conditioning information into neural networks \cite{perez2018film}. By learning scale and bias transformations from a control variable, FiLM can adapt intermediate representations without replacing the main encoder. Differentiable DSP offers a complementary direction. Instead of relying only on unconstrained waveform generation, differentiable audio effects allow gradient-based optimization over physically meaningful parameters \cite{engel2020ddsp,ramirez2021differentiable}. This is especially relevant for production tasks, where equalization, compression, limiting, and related effects have established engineering interpretations. Multi-resolution spectral losses further support perceptually relevant optimization in audio generation and enhancement \cite{steinmetz2020auraloss,yamamoto2020parallel}.
 
-Taken together, prior work suggests three unresolved issues: mastering-oriented enhancement remains underexplored relative to adjacent audio tasks, genre information is useful but incomplete as a style representation, and interpretable differentiable processing has not been sufficiently studied in genre-conditioned mastering settings. The present study addresses these gaps by evaluating style-conditioned enhancement under a controlled protocol, using genre information as an explicit conditioning signal while keeping the learned transformation grounded in differentiable audio-processing operations.
+Taken together, prior work leaves three gaps unaddressed. Mastering-oriented enhancement has received less attention than neighboring tasks such as source separation and automatic mixing, and the style-dependent decisions specific to mastering have not been directly studied. Genre labels have been used as conditioning signals, but a single genre label cannot distinguish tracks that differ in loudness target, spectral balance, dynamic range, or recording era, and no prior mastering system has examined how much this coarseness limits what a model can learn. Finally, FiLM conditioning and differentiable DSP have each been explored independently, but their combination for genre-aware enhancement remains an open question. The present study addresses these gaps by evaluating style-conditioned enhancement under a controlled protocol, using genre information as an explicit conditioning signal while keeping the learned transformation grounded in differentiable audio-processing operations.
 
 \section{Methodology}
 \subsection{Problem Formulation}
@@ -86,22 +87,23 @@ This formulation is designed to preserve a connection between the learned model 
 \subsection{Architecture}
 The architecture consists of four components, shown in Fig.~\ref{fig:pipeline}. First, log-mel spectral features are extracted from the input audio and passed to a Transformer encoder \cite{vaswani2017attention}. The encoder models temporal dependencies in the spectral representation and produces a compact audio feature vector.
 
-Second, each genre label is mapped to a learned embedding. This embedding represents genre as a continuous conditioning signal rather than as a hard-coded rule set. Third, the genre embedding modulates the audio representation using FiLM:
+Second, each integer genre label indexes into a learnable weight matrix of shape $10 \times 256$, retrieving a 256-dimensional dense vector that is optimized jointly with the rest of the model. Third, the genre embedding modulates the audio representation using FiLM:
 \begin{equation}
 \mathrm{FiLM}(h,z_g)=\gamma(z_g)\odot h+\beta(z_g),
 \end{equation}
-where $h$ is the encoded audio representation and $\gamma(\cdot)$ and $\beta(\cdot)$ are learned affine transformations of the genre embedding.
+where $h$ is the encoded audio representation and $\gamma(\cdot)$ and $\beta(\cdot)$ are small feed-forward networks that take the genre embedding as input and output a per-feature scale and bias, respectively.
 
-Finally, the conditioned representation is mapped to parameters for a differentiable DSP chain. The chain includes loudness control, parametric equalization, multiband compression, limiting, and stereo-width adjustment. These modules are selected because they correspond to common mastering operations while remaining amenable to differentiable optimization.
+Finally, the conditioned representation is mapped to parameters for a differentiable DSP chain. The chain includes loudness control, parametric equalization, multiband compression, limiting, and stereo-width adjustment. These modules are selected because they correspond to common mastering operations while their parameters can be optimized by gradient descent. It is worth noting that the model predicts a single global parameter set per clip rather than time-varying parameters. Dynamic effects such as compression and limiting are therefore applied with fixed thresholds and ratios across the full signal, whereas in professional mastering these settings often change across song sections. This is a deliberate simplification of the proof-of-concept setting and a clear direction for future work.
 
-\begin{figure}[htbp]
+\begin{figure*}[htbp]
 \centering
-\includegraphics[width=0.95\linewidth]{figures/fig_architecture_pipeline.png}
+\includegraphics[width=0.95\textwidth]{figures/fig_architecture_pipeline.png}
 \caption{GenreMaster pipeline. Audio features are encoded, modulated by learned genre embeddings, and mapped to parameters for a differentiable mastering-inspired DSP chain.}
 \label{fig:pipeline}
-\end{figure}
+\end{figure*}
 
-Training minimizes a weighted combination of loudness, spectral, dynamic, and perceptual terms:
+Training minimizes a weighted combination of loss terms, each targeting a different subset of the parameter vector $\phi$: the loudness term supervises $\phi_{\mathrm{lufs}}$, the spectral term supervises $\phi_{\mathrm{eq}}$, the dynamic term supervises $\phi_{\mathrm{comp}}$ and $\phi_{\mathrm{lim}}$, and the perceptual term provides a holistic penalty over the full output:
+\begin{strip}
 \begin{equation}
 \mathcal{L}_{\mathrm{total}} =
 \lambda_{\mathrm{loud}}\mathcal{L}_{\mathrm{loud}}+
@@ -109,19 +111,24 @@ Training minimizes a weighted combination of loudness, spectral, dynamic, and pe
 \lambda_{\mathrm{dyn}}\mathcal{L}_{\mathrm{dyn}}+
 \lambda_{\mathrm{perc}}\mathcal{L}_{\mathrm{perc}}.
 \end{equation}
+\end{strip}
 Two components are particularly important for mastering-oriented behavior. The loudness term penalizes differences in global level using an RMS-based decibel approximation:
+\begin{strip}
 \begin{equation}
 \mathcal{L}_{\mathrm{loud}} = \frac{1}{B}\sum_{i=1}^{B}\left|20\log_{10}(\mathrm{RMS}(\hat{y}_i)+\epsilon)-20\log_{10}(\mathrm{RMS}(y_i)+\epsilon)\right|,
 \end{equation}
+\end{strip}
 where $B$ is the batch size and $\epsilon$ is a small constant for numerical stability. The dynamic term penalizes differences in crest factor so that peak-to-average behavior is also matched:
+\begin{strip}
 \begin{equation}
 \mathcal{L}_{\mathrm{dyn}} = \frac{1}{B}\sum_{i=1}^{B}\left|20\log_{10}\frac{p(\hat{y}_i)+\epsilon}{\mathrm{RMS}(\hat{y}_i)+\epsilon}-20\log_{10}\frac{p(y_i)+\epsilon}{\mathrm{RMS}(y_i)+\epsilon}\right|,
 \end{equation}
+\end{strip}
 where $p(\cdot)$ denotes a differentiable peak approximation.
 The loss design reflects the fact that mastering quality cannot be captured by a single waveform distance. Loudness alignment, spectral balance, dynamic behavior, and perceptual similarity each capture a different aspect of the desired transformation. In the present proof-of-concept, the loss is used to test learnability under controlled conditions rather than to define a complete perceptual mastering criterion.
 
 \subsection{Data and Experimental Setup}
-The experiment uses GTZAN after removing one corrupted file, yielding 999 valid clips across ten genres. The data are split in a stratified manner into training, validation, and test partitions, as summarized in Table~\ref{tab:data_split}. All audio is resampled to 22,050 Hz and represented as 30-second clips. Since GTZAN contains finished music rather than unmastered/mastered pairs, we construct synthetic training pairs to evaluate the model. We create the input by applying degradation operations that imitate common pre-mastering deficiencies. Using the original clip as a pseudo-target provides a controlled learning problem, though it should not be interpreted as a faithful simulation of professional mastering.
+The experiment uses GTZAN after removing one corrupted file, yielding 999 valid clips across ten genres. The data are split in a stratified manner into training, validation, and test partitions, as summarized in Table~\ref{tab:data_split}. All audio is resampled to 22,050 Hz and represented as 30-second clips. Since GTZAN contains finished music rather than unmastered/mastered pairs, we construct synthetic training pairs using a loudness-normalization protocol. Each clip is normalized to a fixed integrated loudness of $-18\,\mathrm{LUFS}$ using ITU-R BS.1770 measurement; the normalized clip serves as the model input and the original clip as the reconstruction target. The input therefore differs from the target only in overall gain, not in spectral shape, dynamic range, or any other signal property. This is a deliberate simplification: it provides a tractable, reproducible learning problem that tests whether genre conditioning and differentiable DSP can be trained end-to-end, while making no claim that the task represents the full complexity of professional mastering.
 
 To establish that the GTZAN labels provide a meaningful conditioning signal, we first trained a separate ResNet-based genre classifier on the same corpus. This auxiliary stage was used to verify that genre structure is discriminable in the dataset before running the mastering experiment. The reported Transformer-based mastering model was then trained with genre labels as the conditioning variable, using learned genre embeddings within the FiLM-conditioned parameter-prediction pipeline.
 
@@ -205,17 +212,10 @@ Best epoch & 17 \\
 \end{tabular}
 \end{table}
 
-\subsection{Genre-Dependent Behavior}
-Fig.~\ref{fig:genreloss} reports test loss by genre. The losses remain within a narrow range across the ten GTZAN categories. This consistency suggests that genre conditioning does not simply benefit one or two genres while failing on others. Instead, the framework learns a shared enhancement structure that can be adapted through the genre embedding.
+\subsection{Loss Component Analysis}
+The total test loss breaks down as follows: loudness 2.98 (48.8\%), dynamic 2.13 (34.8\%), perceptual 0.98 (16.1\%), and spectral 0.02 (0.3\%). Loudness and dynamic terms together account for 83.6\% of the total, while the spectral term is negligible. This distribution directly reflects the nature of the task: because the input differs from the target only in overall gain, the spectral content is already well-matched and the model has little spectral error to correct. The dominant loudness and dynamic residuals indicate that even a global gain shift creates measurable differences in RMS-based loudness and crest factor that the model does not fully resolve. The near-zero spectral loss also exposes a limitation: the current protocol does not exercise the equalization component of the DSP chain, so the spectral branch of the model receives almost no training signal.
 
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{figures/fig_transformer_per_genre_test_loss.png}
-\caption{Per-genre test loss on GTZAN. The narrow spread indicates stable behavior across the evaluated genre labels.}
-\label{fig:genreloss}
-\end{figure}
-
-To verify that the dataset supports meaningful genre-conditioned modeling, we first trained a separate ResNet-based genre classifier on the same corpus. The classifier reached high validation accuracy, as shown in Fig.~\ref{fig:clf}, indicating that the genre labels are learnable from the spectral representation. This auxiliary result motivated the subsequent mastering experiment, in which genre labels were used as the conditioning signal for the Transformer-based model. At the same time, GTZAN genre labels remain coarse and should not be treated as complete style descriptors.
+To verify that the dataset supports meaningful genre-conditioned modeling, we first trained a separate ResNet-based genre classifier on the same corpus. The classifier reached a best validation accuracy of 88.9\%, as shown in Fig.~\ref{fig:clf}, indicating that genre labels are learnable from the spectral representation and are consistent with published GTZAN baselines. This auxiliary result motivated the subsequent mastering experiment, in which genre labels were used as the conditioning signal for the Transformer-based model. At the same time, GTZAN genre labels remain coarse and should not be treated as complete style descriptors.
 
 \begin{figure}[htbp]
 \centering
@@ -227,7 +227,11 @@ To verify that the dataset supports meaningful genre-conditioned modeling, we fi
 \FloatBarrier
 
 \section{Discussion}
-The results show that a neural system can learn genre-conditioned audio transformations when the output space is constrained through differentiable DSP. The small validation-test gap indicates stable generalization within the controlled GTZAN setting. The per-genre analysis further suggests that the model does not rely on a single global correction but adapts its processing across genre labels. The architecture also provides a practical advantage over direct waveform generation. Because the model predicts parameters for familiar audio effects, its behavior can be inspected in terms closer to mastering practice. This does not make the system equivalent to a mastering engineer, but it gives the learning problem a useful structure and reduces the opacity of the output transformation.
+The experiment tests a specific and narrow claim: can a genre-conditioned differentiable DSP pipeline learn to reconstruct an audio clip from a loudness-shifted version of itself? The answer is yes, within the controlled GTZAN setting. The model learns to apply a corrective gain through the DSP chain, and it does so with a small validation-test gap, indicating that the learned behavior generalizes across the stratified split.
+
+However, this falls well short of genre-conditioned mastering. The task reduces to loudness recovery — the input and target differ only in overall gain, so the model has no incentive to apply genre-specific equalization, compression shaping, or stereo decisions. The loss component analysis confirms this: the spectral term contributes only 0.3\% of the total loss, meaning the equalization branch of the DSP chain receives almost no training signal. The genre embedding is present in the architecture, but the current task does not require it to do meaningful work — a genre-agnostic gain correction would achieve similar results.
+
+What the experiment does demonstrate is that the architecture is trainable end-to-end and that the differentiable DSP formulation does not introduce instabilities. The Transformer encoder, FiLM conditioning pathway, and DSP parameter predictor can all be jointly optimized under the adopted protocol. This is a necessary but not sufficient condition for a mastering system. The architecture provides a foundation that could support genre-conditioned processing once a richer task — one that requires spectral, dynamic, and stereo decisions that genuinely differ across genres — is used for training.
 
 The main limitation is the absence of real mastering pairs. GTZAN contains already-finished music, and the degraded inputs are generated synthetically. Real pre-mastering material differs in recording quality, mix balance, headroom, noise, room coloration, arrangement density, and artistic intent. A model trained only to reverse synthetic degradation may learn useful signal transformations without learning the judgment required for professional mastering.
 
@@ -243,7 +247,7 @@ Under these conditions, the GenreMaster architecture could serve as a foundation
 \section{Conclusion}
 This paper presented GenreMaster, a genre-conditioned audio enhancement framework that combines Transformer spectral encoding, learned genre embeddings, conditioning mechanisms, and differentiable DSP within a mastering-inspired parameter-prediction pipeline. The central idea is to treat automatic mastering not as unconstrained waveform generation, but as structured control of interpretable audio-processing operations. This design keeps the learned transformation connected to established mastering practice while still enabling end-to-end optimization.
 
-Within the controlled GTZAN proof-of-concept setting, the study showed three main results. First, genre labels provided a usable conditioning signal, supported by the auxiliary genre-classification experiment and by the stable behavior of the enhancement model across the evaluated categories. Second, the Transformer-based mastering model learned the degradation-reversal task with a small validation-test gap, indicating that the architecture can generalize beyond the training split under the adopted protocol. Third, the differentiable DSP formulation made it possible to combine neural representation learning with a parameterized signal-processing chain, offering a more interpretable alternative to direct black-box audio generation.
+Within the controlled GTZAN proof-of-concept setting, the study showed three main results. First, the architecture is trainable end-to-end: the Transformer encoder, FiLM conditioning pathway, and differentiable DSP chain can be jointly optimized without instability. Second, the model generalizes from the training split to held-out test clips, with a small validation-test gap under the loudness-normalization protocol. Third, the loss component analysis reveals that the task effectively reduces to loudness recovery — the spectral loss contributes only 0.3\% of the total, meaning the equalization and spectral branches of the DSP chain receive almost no training signal under the current setup.
 
 These findings are encouraging, but they should be interpreted with appropriate restraint. The present experiment demonstrates technical feasibility under synthetic supervision; it does not establish professional-quality automatic mastering. Because GTZAN contains finished music rather than genuine unmastered/mastered pairs, the task remains a controlled reconstruction problem rather than a full mastering benchmark. In addition, the reported metrics capture reconstruction fidelity more directly than perceptual preference, which limits the strength of any claims about listener-facing quality.
 
