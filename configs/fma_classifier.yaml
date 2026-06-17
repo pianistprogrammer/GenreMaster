@@ -4,8 +4,8 @@ experiment:
   seed: 42
 
 data:
-  audio_dir: "/Volumes/LLModels/Datasets/fma_small"
-  metadata_csv: "/Users/I558118/Documents/Projects/GenreMaster/data/fma_metadata/tracks.csv"
+  audio_dir: "C:/Users/jerem/Documents/Datasets/fma_small"
+  metadata_csv: "C:/Users/jerem/Documents/Datasets/fma_metadata/tracks.csv"
   sample_rate: 22050
   duration: 30.0
   n_genres: 8
