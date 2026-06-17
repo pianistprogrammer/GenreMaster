@@ -340,17 +340,8 @@ class GenreMasterLoss(nn.Module):
         lambda_spectral: float = 0.5,
         lambda_dynamic: float = 0.5,
         lambda_perceptual: float = 0.1,
+        use_stft: bool = False,
     ):
-        """
-        Initialize combined loss.
-
-        Args:
-            sample_rate: Audio sample rate
-            lambda_loudness: Weight for loudness loss
-            lambda_spectral: Weight for spectral loss
-            lambda_dynamic: Weight for dynamic range loss
-            lambda_perceptual: Weight for perceptual loss
-        """
         super().__init__()
 
         self.lambda_loudness = lambda_loudness
@@ -359,7 +350,7 @@ class GenreMasterLoss(nn.Module):
         self.lambda_perceptual = lambda_perceptual
 
         self.loudness_loss = LoudnessLoss(sample_rate)
-        self.spectral_loss = SpectralLoss(sample_rate=sample_rate)
+        self.spectral_loss = SpectralLoss(sample_rate=sample_rate, use_stft=use_stft)
         self.dynamic_loss = DynamicRangeLoss(sample_rate)
         self.perceptual_loss = MultiResolutionSTFTLoss()
 
@@ -456,18 +447,8 @@ class GenreMasterLoss(nn.Module):
 def create_loss_function(
     sample_rate: int = 44100,
     loss_weights: Optional[Dict[str, float]] = None,
+    use_stft: bool = False,
 ) -> GenreMasterLoss:
-    """
-    Factory function to create loss function.
-
-    Args:
-        sample_rate: Audio sample rate
-        loss_weights: Optional dict of loss weights
-            Keys: 'loudness', 'spectral', 'dynamic', 'perceptual'
-
-    Returns:
-        GenreMasterLoss instance
-    """
     if loss_weights is None:
         loss_weights = {
             'loudness': 1.0,
@@ -482,4 +463,5 @@ def create_loss_function(
         lambda_spectral=loss_weights.get('spectral', 0.5),
         lambda_dynamic=loss_weights.get('dynamic', 0.5),
         lambda_perceptual=loss_weights.get('perceptual', 0.1),
+        use_stft=use_stft,
     )

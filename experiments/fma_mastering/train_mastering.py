@@ -67,7 +67,8 @@ def train_epoch(model, loader, criterion, optimizer, transform, device, grad_cli
         total_loss += loss.item() * bs
         n += bs
         for k in component_sums:
-            component_sums[k] += components.get(k, 0.) * bs
+            v = components.get(k, 0.)
+            component_sums[k] += (v.item() if hasattr(v, 'item') else float(v)) * bs
 
     avg = total_loss / max(n, 1)
     avg_components = {k: v / max(n, 1) for k, v in component_sums.items()}
@@ -147,6 +148,7 @@ def main(config_path: str):
     criterion = create_loss_function(
         sample_rate=cfg['data']['sample_rate'],
         loss_weights=cfg['loss']['weights'],
+        use_stft=str(device) == 'cuda',
     )
     optimizer = torch.optim.Adam(
         model.parameters(),
