@@ -54,7 +54,8 @@ def train_epoch(model, loader, criterion, optimizer, transform, device, grad_cli
         optimizer.zero_grad()
         outputs = model(inputs, genre_idxs)
 
-        loss, components = criterion(outputs, targets, return_components=True)
+        components = criterion(outputs, targets, return_components=True)
+        loss = components['total']
         if not torch.isfinite(loss):
             continue
 
