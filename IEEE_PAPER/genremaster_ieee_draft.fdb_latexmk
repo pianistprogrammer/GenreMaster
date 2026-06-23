@@ -1,14 +1,14 @@
 # Fdb version 4
-["bibtex genremaster_ieee_draft"] 1781686689.58303 "genremaster_ieee_draft.aux" "genremaster_ieee_draft.bbl" "genremaster_ieee_draft" 1781686691.27627 0
-  "./references.bib" 1781686689.22051 5917 4c84646d6f72aff5840175e840f3825b ""
+["bibtex genremaster_ieee_draft"] 1781686689.58303 "genremaster_ieee_draft.aux" "genremaster_ieee_draft.bbl" "genremaster_ieee_draft" 1781699708.1032 0
+  "./references.bib" 1781689249.05868 5917 4c84646d6f72aff5840175e840f3825b ""
   "/usr/local/texlive/2026/texmf-dist/bibtex/bst/ieeetran/IEEEtran.bst" 1440712899 57748 7c8250ecf02814ce6ddc0cdbb63df1dd ""
-  "genremaster_ieee_draft.aux" 1781686691.02204 4483 e6c49ce28e61c90090537c9fe442691f "pdflatex"
+  "genremaster_ieee_draft.aux" 1781699707.84907 4483 e6c49ce28e61c90090537c9fe442691f "pdflatex"
   (generated)
   "genremaster_ieee_draft.bbl"
   "genremaster_ieee_draft.blg"
   (rewritten before read)
-["pdflatex"] 1781686689.73411 "/Users/I558118/Documents/Projects/GenreMaster/IEEE_PAPER/genremaster_ieee_draft.tex" "genremaster_ieee_draft.pdf" "genremaster_ieee_draft" 1781686691.27663 0
-  "/Users/I558118/Documents/Projects/GenreMaster/IEEE_PAPER/genremaster_ieee_draft.tex" 1781686689.2201 31366 78b1ca4a42c5cb540a7532867e1a9582 ""
+["pdflatex"] 1781699706.59872 "/Users/I558118/Documents/Projects/GenreMaster/IEEE_PAPER/genremaster_ieee_draft.tex" "genremaster_ieee_draft.pdf" "genremaster_ieee_draft" 1781699708.10352 0
+  "/Users/I558118/Documents/Projects/GenreMaster/IEEE_PAPER/genremaster_ieee_draft.tex" 1781699706.37171 31367 8e2e7c14c5f50f4ea945ba8eb3c36cab ""
   "/usr/local/texlive/2026/texmf-dist/fonts/enc/dvips/base/8r.enc" 1165713224 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
   "/usr/local/texlive/2026/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/local/texlive/2026/texmf-dist/fonts/tfm/adobe/courier/pcrr7t.tfm" 1136768653 960 379cc0019370a9e0208a0a3f949f847a ""
@@ -92,14 +92,14 @@
   "/usr/local/texlive/2026/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1773831732 5541377 04880c840ca220163a28f1a3af0ee662 ""
   "/usr/local/texlive/2026/texmf-var/web2c/pdftex/pdflatex.fmt" 1773831718 3636762 11611dce089160af9d6104d910a89675 ""
   "/usr/local/texlive/2026/texmf.cnf" 1772409725 577 648cd9f92f9c0eac486f4c71c85cfbbe ""
-  "IEEEtran.cls" 1781686689.19783 288451 2ca944e3837f3f55e325ddfd2f1a2479 ""
-  "figures/fig_architecture_pipeline.png" 1781686689.20365 258256 4d2496d9612a64d2421f4bb6121644b8 ""
-  "figures/fig_classifier_val_accuracy.png" 1781686689.20482 168435 e3438f2cf167c44ae36d05398dcbbdb6 ""
-  "figures/fig_predicted_params.png" 1781686689.20666 88048 758f4da743a80f285d0ead31d32f36c6 ""
-  "figures/fig_transformer_training_loss.png" 1781686689.20817 130864 790212e57aa3a7b8bd6f72638c9896b1 ""
-  "genremaster_ieee_draft.aux" 1781686691.02204 4483 e6c49ce28e61c90090537c9fe442691f "pdflatex"
-  "genremaster_ieee_draft.bbl" 1781686689.72932 5289 cbb424200a89dc3d34dbae49c601e586 "bibtex genremaster_ieee_draft"
-  "genremaster_ieee_draft.tex" 1781686689.2201 31366 78b1ca4a42c5cb540a7532867e1a9582 ""
+  "IEEEtran.cls" 1781689146.4618 288451 2ca944e3837f3f55e325ddfd2f1a2479 ""
+  "figures/fig_architecture_pipeline.png" 1781689249.01444 258256 4d2496d9612a64d2421f4bb6121644b8 ""
+  "figures/fig_classifier_val_accuracy.png" 1781689242.30755 168435 e3438f2cf167c44ae36d05398dcbbdb6 ""
+  "figures/fig_predicted_params.png" 1781689253.00762 88048 758f4da743a80f285d0ead31d32f36c6 ""
+  "figures/fig_transformer_training_loss.png" 1781689249.05248 130864 790212e57aa3a7b8bd6f72638c9896b1 ""
+  "genremaster_ieee_draft.aux" 1781699707.84907 4483 e6c49ce28e61c90090537c9fe442691f "pdflatex"
+  "genremaster_ieee_draft.bbl" 1781689253.00848 5289 cbb424200a89dc3d34dbae49c601e586 "bibtex genremaster_ieee_draft"
+  "genremaster_ieee_draft.tex" 1781699706.37171 31367 8e2e7c14c5f50f4ea945ba8eb3c36cab ""
   (generated)
   "genremaster_ieee_draft.aux"
   "genremaster_ieee_draft.log"

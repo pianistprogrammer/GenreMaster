@@ -20,6 +20,7 @@ Usage:
 
 import argparse
 import sys
+import warnings
 from pathlib import Path
 
 import yaml
@@ -27,10 +28,14 @@ import torch
 import trackio
 from torch.utils.data import DataLoader
 
+# torchaudio STFT emits a spurious resize warning from its internal torch.stft call
+warnings.filterwarnings("ignore", message="An output with one or more elements was resized")
+
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from data.fma import setup_fma_medium
+from data.fma_small import setup_fma_small, FMA_SMALL_GENRES
 from data.gtzan import setup_gtzan, GTZAN_GENRES
 from models.genre_classifier import GenreCNNClassifier, train_genre_classifier
 from models.resnet_genre_classifier import (
@@ -67,6 +72,16 @@ def load_dataset(config, data_root):
             val_ratio=config['data'].get('val_ratio', 0.1),
         )
         genre_names = GTZAN_GENRES
+    elif dataset_type.lower() == 'fma_small':
+        print("\nLoading FMA Small dataset...")
+        metadata_csv = config['data']['metadata_csv']
+        datasets, genre_to_idx = setup_fma_small(
+            audio_dir=str(audio_dir),
+            metadata_csv=metadata_csv,
+            sample_rate=config['data'].get('sample_rate', 22050),
+            duration=config['data'].get('duration', 30.0),
+        )
+        genre_names = FMA_SMALL_GENRES
     else:
         print("\nLoading FMA dataset...")
         datasets, genre_to_idx = setup_fma_medium(
@@ -84,10 +99,7 @@ def print_genre_mapping(genre_to_idx, genre_names=None):
     """Print genre mapping."""
     print(f"\n✓ Loaded {len(genre_to_idx)} genres:")
     for genre, idx in sorted(genre_to_idx.items(), key=lambda x: x[1]):
-        if genre_names:
-            print(f"  {idx}: {genre}")
-        else:
-            print(f"  {idx}: Genre ID {genre}")
+        print(f"  {idx}: {genre}")
 
 
 def create_model(config, n_genres):

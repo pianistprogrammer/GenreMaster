@@ -88,8 +88,8 @@ class ResNetGenreClassifier(nn.Module):
             power=2.0,
         )
 
-        # Amplitude to dB
-        self.amplitude_to_db = T.AmplitudeToDB()
+        # Amplitude to dB — top_db=80 clamps dynamic range to 80 dB below peak
+        self.amplitude_to_db = T.AmplitudeToDB(top_db=80)
 
         # SpecAugment (applied during training only)
         if spec_augment:
@@ -161,8 +161,12 @@ class ResNetGenreClassifier(nn.Module):
         # Convert to dB scale
         log_mel = self.amplitude_to_db(mel_spec)
 
-        # Normalize to roughly [-1, 1] range
-        log_mel = (log_mel + 80) / 80
+        # Normalize to [0, 1] by making dB relative to each item's peak.
+        # AmplitudeToDB uses an absolute reference (amin=1e-10), so raw output
+        # can exceed 0 dB when mel power > 1. Subtracting the per-item max
+        # gives a range of [-80, 0] regardless of absolute loudness level.
+        log_mel = log_mel - log_mel.amax(dim=(-2, -1), keepdim=True)
+        log_mel = (log_mel.clamp(min=-80.0) + 80.0) / 80.0
 
         # Add channel dimension [batch, 1, n_mels, time]
         log_mel = log_mel.unsqueeze(1)

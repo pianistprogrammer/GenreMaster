@@ -1,45 +1,83 @@
-experiment:
-  name: "fma-genre-classifier"
-  description: "ResNet genre classifier on FMA-small (8 genres)"
-  seed: 42
+# Genre Classifier Configuration (FMA Small - 8 Genres) - GTZAN Pipeline
+# Mirrors gtzan.yaml exactly — only dataset paths and n_genres differ
 
+# Data configuration
 data:
-  audio_dir: "C:/Users/jerem/Documents/Datasets/fma_small"
-  metadata_csv: "C:/Users/jerem/Documents/Datasets/fma_metadata/tracks.csv"
+  dataset: "fma_small"
+  audio_dir: "/Volumes/LLModels/Datasets/fma_small"
+  metadata_csv: "/Volumes/LLModels/Projects/GenreMaster/data/fma_metadata/tracks.csv"
+  root_dir: "/Users/I558118/Documents/Projects/GenreMaster/data"
   sample_rate: 22050
   duration: 30.0
   n_genres: 8
 
+# Training configuration  — identical to GTZAN pipeline
+training:
+  batch_size: 16
+  num_epochs: 200
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-4
+
+  # Learning rate schedule
+  lr_scheduler: "cosine_warmup"
+  warmup_epochs: 10
+
+  # Augmentation
+  use_mixup: true
+  mixup_alpha: 0.4
+
+  # Label smoothing
+  label_smoothing: 0.1
+
+  # Checkpointing
+  save_every: 10
+  keep_last_n: 3
+
+  # Early stopping
+  patience: 40
+  min_delta: 1.0e-4
+
+  # Gradient clipping
+  gradient_clip: 1.0
+
+# Model configuration — identical to GTZAN pipeline
 model:
   type: "resnet"
+  pretrained: true
   n_genres: 8
   n_mels: 128
   n_fft: 2048
   hop_length: 512
   dropout: 0.5
-  pretrained: true
-  spec_augment: true
 
-training:
-  batch_size: 16
-  num_epochs: 30
-  learning_rate: 1.0e-3
-  weight_decay: 1.0e-4
-  lr_scheduler: "cosine"
-  warmup_epochs: 2
-  patience: 8
-  min_delta: 1.0e-4
-  grad_clip: 1.0
+  # SpecAugment
+  spec_augment:
+    enabled: true
+    freq_mask_param: 27
+    time_mask_param: 100
+    n_freq_masks: 2
+    n_time_masks: 2
 
+# Optimizer — AdamW identical to GTZAN
 optimizer:
-  name: "adam"
+  name: "adamw"
   betas: [0.9, 0.999]
   eps: 1.0e-8
 
+# Device configuration
 device:
   type: "auto"
   num_workers: 0
 
+# Logging configuration
+logging:
+  use_trackio: true
+  log_every: 10
+  trackio:
+    project: "genremaster"
+    experiment: "fma-small-resnet-classifier"
+
+# Output paths
 output:
-  checkpoint_dir: "results/fma/classifier"
-  log_dir: "results/fma/logs"
+  checkpoint_dir: "results"
+  model_name: "genre_classifier_fma_small_resnet_best.pt"
